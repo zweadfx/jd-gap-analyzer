@@ -1,0 +1,17 @@
+# secrets
+.env
+
+# 실행별 원본 응답 (로컬 튜닝 기록, 공유 대상 아님)
+out/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# uv.lock은 커밋한다 (애플리케이션이므로 재현성 확보)
+
+# editors
+.idea/
+.vscode/

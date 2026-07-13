@@ -283,11 +283,43 @@ def generate_suggestions(
 
 
 def run_pipeline(job_path: Path, resume_path: Path) -> RunRecord:
-    """Step 1 → Step 2 → verify → Top3 선정 → Step 3.
+    """파일 경로로 실행한다. cli.py 전용 얇은 래퍼.
 
-    cli.py가 부르는 유일한 함수. 출력 포매팅은 하지 않는다.
+    길이 검증은 load_inputs가 한다(초과 시 InputTooLongError, 자동으로 자르지 않음).
     """
     job_text, resume_text = load_inputs(job_path, resume_path)
+    return analyze(job_text, resume_text, job_path=str(job_path), resume_path=str(resume_path))
+
+
+def analyze(
+    job_text: str,
+    resume_text: str,
+    *,
+    job_path: str = "<web>",
+    resume_path: str = "<web>",
+) -> RunRecord:
+    """Step 1 → Step 2 → verify → Top3 선정 → Step 3.
+
+    텍스트를 직접 받는다. CLI(파일)와 웹(붙여넣기)이 같은 함수를 쓰게 하려는 것이다.
+    파이프라인이 두 벌이 되면 웹에서만 나는 버그가 생긴다.
+
+    job_path/resume_path는 기록용 라벨일 뿐이다. 웹에서는 경로가 없으므로 "<web>".
+    """
+    if len(job_text) > MAX_JOB_CHARS:
+        raise InputTooLongError(
+            f"공고가 {len(job_text):,}자로 제한({MAX_JOB_CHARS:,}자)을 넘었습니다. "
+            f"직접 줄여서 다시 시도하세요. 자동으로 자르지 않습니다."
+        )
+    if len(resume_text) > MAX_RESUME_CHARS:
+        raise InputTooLongError(
+            f"이력서가 {len(resume_text):,}자로 제한({MAX_RESUME_CHARS:,}자)을 넘었습니다. "
+            f"직접 줄여서 다시 시도하세요. 자동으로 자르지 않습니다."
+        )
+    if not job_text.strip():
+        raise InputTooLongError("공고가 비어 있습니다.")
+    if not resume_text.strip():
+        raise InputTooLongError("이력서가 비어 있습니다.")
+
     client = OpenAI()
 
     warnings: list[str] = []
@@ -353,8 +385,8 @@ def run_pipeline(job_path: Path, resume_path: Path) -> RunRecord:
         timestamp=datetime.now().strftime("%Y%m%d_%H%M%S"),
         summary=summary,
         model=MODEL,
-        job_path=str(job_path),
-        resume_path=str(resume_path),
+        job_path=job_path,
+        resume_path=resume_path,
         job_chars=len(job_text),
         resume_chars=len(resume_text),
         prompts={"step1": prompt1, "step2": prompt2, "step3": prompt3},

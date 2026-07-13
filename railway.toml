@@ -1,0 +1,17 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+
+# 필요한 환경변수 (Railway 대시보드에서 설정):
+#   OPENAI_API_KEY   필수
+#   ALLOWED_ORIGINS  Vercel 프론트 도메인 (쉼표 구분). 미설정 시 localhost:3000만 허용
+#   EVENTS_PATH      영구 볼륨 경로. 예: /data/events.jsonl
+#   RATE_LIMIT_PER_DAY  기본 5
+#
+# ⚠️ 볼륨을 /data 에 마운트하고 EVENTS_PATH=/data/events.jsonl 로 지정할 것.
+#    안 하면 재배포마다 퍼널 데이터가 조용히 사라진다. "N명이 썼다"를 증명할 수 없게 된다.

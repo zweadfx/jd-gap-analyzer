@@ -2,7 +2,7 @@
 name = "jd-gap-analyzer"
 version = "0.1.0"
 description = "채용 공고가 요구하는데 이력서에 근거가 없는 항목 Top 3을 뽑는 CLI"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "openai>=1.50",
     "pydantic>=2.7",
@@ -18,7 +18,7 @@ package = false
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [

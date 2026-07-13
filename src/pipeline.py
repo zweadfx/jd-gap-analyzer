@@ -10,6 +10,7 @@
 """
 
 import hashlib
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -41,13 +42,23 @@ SAMPLES_DIR = Path("data/samples")
 
 
 def prompt_hash() -> str:
-    """src/prompts.py 내용의 해시.
+    """모델에게 실제로 전달되는 모든 것의 해시.
 
-    실행 결과와 함께 저장해서, 나중에 "강등률이 낮았던 실행들은 어떤 프롬프트
-    버전이었나"를 커밋 로그를 뒤지지 않고 코드로 뽑을 수 있게 한다.
+    = prompts.py 원문 + LLM 응답 스키마(JSON schema)
+
+    응답 스키마를 반드시 포함해야 한다. Pydantic 모델의 필드명과 Field(description=...)은
+    JSON schema로 변환돼 API로 전달된다 — 그것도 사실상 프롬프트다.
+    스키마 설명 한 줄만 고쳐도 모델 행동이 바뀌는데 prompt_hash가 그대로면,
+    "같은 프롬프트인데 결과가 달라졌다"고 잘못 결론 내리게 된다. 관측 가능성이 조용히 깨진다.
+
+    RunSummary/RunRecord 같은 로깅 전용 모델은 API로 나가지 않으므로 제외한다.
     """
-    source = Path(__file__).with_name("prompts.py").read_bytes()
-    return hashlib.sha256(source).hexdigest()[:12]
+    h = hashlib.sha256()
+    h.update(Path(__file__).with_name("prompts.py").read_bytes())
+    for model in (JobRequirements, GapAnalysis, Suggestions):
+        schema = json.dumps(model.model_json_schema(), sort_keys=True, ensure_ascii=False)
+        h.update(schema.encode())
+    return h.hexdigest()[:12]
 
 
 def resolve_out_dir(resume_path: Path, base: Path = Path("out")) -> Path:

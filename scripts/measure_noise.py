@@ -36,6 +36,16 @@ JOB = Path("data/samples/job1.txt")
 RESUME = Path("data/samples/resume.txt")
 
 
+def fingerprint(reqs) -> tuple:
+    """Step1 출력의 텍스트 지문.
+
+    개수만 비교하면 안 된다. 개수가 같아도 문구나 category/kind가 흔들리면
+    Step2의 입력이 바뀌어 캐스케이드한다. 실제로 이 함수가 없던 시절
+    "개수 11개로 동일"을 "출력이 동일"로 오독해 캐스케이드 가설을 잘못 기각할 뻔했다.
+    """
+    return tuple((r.text, r.category, r.kind) for r in reqs)
+
+
 def measure(analysis, requirements_count: int, resume_text: str) -> dict:
     verified, demoted, _ = verify_quotes(analysis, resume_text)
     offered = sum(1 for e in analysis.evidences if e.quote)
@@ -74,8 +84,10 @@ def main() -> int:
     print("A. 전체 (Step1 + Step2) — 실사용 조건의 총 노이즈")
     print("─" * 62)
     a_runs = []
+    prints = []  # Step1 텍스트 지문. 개수가 아니라 이것으로 안정성을 판정한다.
     for i in range(n):
         reqs, _, _, _ = extract_requirements(client, job_text)
+        prints.append(fingerprint(reqs.requirements))
         analysis, _, _, _ = match_evidence(client, reqs.requirements, resume_text)
         m = measure(analysis, len(reqs.requirements), resume_text)
         a_runs.append(m)
@@ -84,7 +96,12 @@ def main() -> int:
             f"| 강등 {m['demoted']} | 발견 {m['evidence_found']:>2} "
             f"({m['evidence_rate']:.0%})"
         )
+    step1_stable = len(set(prints)) == 1
     print()
+    print(
+        f"  Step1 텍스트 지문: {'전 회차 동일' if step1_stable else '★ 흔들림 ★'} "
+        f"({len(set(prints))}종)"
+    )
     print(spread("요구사항 수", [r["requirements"] for r in a_runs], pct=False))
     print(spread("지어내기율", [r["hallucination_rate"] for r in a_runs]))
     print(spread("발견율", [r["evidence_rate"] for r in a_runs]))
@@ -124,11 +141,16 @@ def main() -> int:
     print(f"최소 검출 가능 효과 = max(노이즈, 양자화) ≈ {max(a_band, b_band, quantum):.0%}p")
     print("이보다 작은 개선은 '개선했다'고 주장할 수 없다.\n")
 
-    if req_band == 0:
-        print("Step1: 요구사항 수가 전 회차 동일 → Step1은 노이즈원이 아니다.")
+    # 개수(req_band)가 아니라 텍스트 지문으로 판정한다. 개수가 같아도 문구가 흔들리면
+    # Step2 입력이 바뀐다.
+    if step1_stable:
+        print("Step1: 텍스트 지문이 전 회차 동일 → Step1은 노이즈원이 아니다.")
         print("       (튜닝 중 Step1 출력을 동결할 필요 없음)")
+        print(f"       단, 이것은 {JOB.name} 한 건에서의 안정성이다. 일반화하지 말 것.")
     else:
-        print(f"Step1: 요구사항 수가 {req_band}개 흔들림 → Step2로 캐스케이드한다.")
+        print("Step1: ★ 텍스트 지문이 흔들린다 → Step2로 캐스케이드한다.")
+        print(f"       (요구사항 수 밴드 {req_band}개. 이 수치는 발견율의 분모이므로,")
+        print("        아무것도 안 바뀌어도 지표가 움직인다 — 측정 축 자체가 오염된다.)")
         print("       튜닝 중에는 Step1 출력을 파일로 동결하고 Step2만 비교할 것.")
 
     print("\n⚠️ 공고 1건 × 소수 반복으로는 프롬프트 개선을 검출할 수 없다.")

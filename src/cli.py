@@ -106,14 +106,22 @@ def render(record: RunRecord) -> None:
     print()
 
     # --- 계측 ---
-    total_reqs = len(record.requirements.requirements)
+    s = record.summary
     print(RULE)
-    print(f"quote 강등: {record.hallucination_count}건 / 요구사항 {total_reqs}개")
     print(
-        f"지연: {record.total_latency_s:.1f}s | "
-        f"토큰: {record.total_tokens:,} | "
-        f"예상 비용: ${record.total_cost_usd:.4f}"
+        f"quote 강등: {s.demoted_count}건 / 요구사항 {s.requirements_count}개 "
+        f"({s.demotion_rate:.0%})"
     )
+    print(
+        f"지연: {s.latency_s:.1f}s | "
+        f"토큰: {s.tokens_in + s.tokens_out:,} | "
+        f"예상 비용: ${s.cost_usd:.4f}"
+    )
+    print(f"프롬프트 해시: {s.prompt_hash} | temperature: {s.temperature}")
+
+    # 강등률 0%는 좋은 소식처럼 보이지만 이 프로젝트에선 거의 확실히 버그다.
+    if s.demoted_count == 0:
+        print("(강등 0건 — 검증이 실제로 돌고 있는지 확인할 것)")
 
 
 def _print_evidence(ev: Evidence, reqs: dict[str, Requirement]) -> None:

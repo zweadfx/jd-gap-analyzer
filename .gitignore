@@ -1,8 +1,15 @@
 # secrets
 .env
 
-# 실행별 원본 응답 (로컬 튜닝 기록, 공유 대상 아님)
-out/
+# 실제 이력서/공고. 샘플과 절대 섞지 않는다.
+data/private/
+
+# 실행 기록 정책:
+#   out/          → 커밋한다. prompt: 커밋과 실행 결과가 같은 커밋에 들어가야
+#                   "이 프롬프트 수정이 이 결과를 만들었다"가 증명된다.
+#   out/private/  → 커밋하지 않는다. 샘플이 아닌 입력(실제 이력서)으로 돌린 결과가
+#                   여기로 간다. pipeline.resolve_out_dir()이 코드로 라우팅한다.
+out/private/
 
 # python
 __pycache__/

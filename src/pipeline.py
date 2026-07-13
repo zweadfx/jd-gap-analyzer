@@ -9,10 +9,10 @@
   포함되어야 하기 때문이다. (지어낸 근거를 근거로 인정하면 갭이 숨는다)
 """
 
+import hashlib
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TypeVar
 
 from openai import LengthFinishReasonError, OpenAI
 from pydantic import BaseModel, ValidationError
@@ -30,12 +30,38 @@ from .schemas import (
     JobRequirements,
     Requirement,
     RunRecord,
+    RunSummary,
     StepUsage,
     Suggestions,
 )
 from .verify import verify_quotes
 
-T = TypeVar("T", bound=BaseModel)
+# 샘플 입력만 out/에 커밋한다. 이 밖의 입력(실제 이력서)은 out/private/로 간다.
+SAMPLES_DIR = Path("data/samples")
+
+
+def prompt_hash() -> str:
+    """src/prompts.py 내용의 해시.
+
+    실행 결과와 함께 저장해서, 나중에 "강등률이 낮았던 실행들은 어떤 프롬프트
+    버전이었나"를 커밋 로그를 뒤지지 않고 코드로 뽑을 수 있게 한다.
+    """
+    source = Path(__file__).with_name("prompts.py").read_bytes()
+    return hashlib.sha256(source).hexdigest()[:12]
+
+
+def resolve_out_dir(resume_path: Path, base: Path = Path("out")) -> Path:
+    """실제 이력서로 돌린 결과가 out/에 남지 않게 코드로 막는다.
+
+    out/run_*.json에는 이력서 전문이 들어간다(step2 프롬프트에 통째로 박힌다).
+    out/은 커밋되는 디렉터리이므로, 샘플이 아닌 입력은 gitignore된 out/private/로 보낸다.
+    규율에 맡기면 언젠가 한 번은 실수한다. 그 한 번이 public 레포에 영구히 남는다.
+    """
+    try:
+        resume_path.resolve().relative_to(SAMPLES_DIR.resolve())
+    except ValueError:
+        return base / "private"
+    return base
 
 
 class InputTooLongError(ValueError):
@@ -82,7 +108,7 @@ def load_inputs(job_path: Path, resume_path: Path) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def call_structured(
+def call_structured[T: BaseModel](
     client: OpenAI,
     *,
     step: str,
@@ -295,8 +321,21 @@ def run_pipeline(job_path: Path, resume_path: Path) -> RunRecord:
                 f"(기대: {BULLETS_PER_GAP}개). 잘라내지 않고 그대로 출력합니다."
             )
 
+    summary = RunSummary(
+        model=MODEL,
+        temperature=TEMPERATURE,
+        prompt_hash=prompt_hash(),
+        requirements_count=len(requirements.requirements),
+        demoted_count=hallucination_count,
+        latency_s=sum(u.latency_s for u in usages),
+        tokens_in=sum(u.prompt_tokens for u in usages),
+        tokens_out=sum(u.completion_tokens for u in usages),
+        cost_usd=sum(u.cost_usd for u in usages),
+    )
+
     return RunRecord(
         timestamp=datetime.now().strftime("%Y%m%d_%H%M%S"),
+        summary=summary,
         model=MODEL,
         job_path=str(job_path),
         resume_path=str(resume_path),
@@ -315,8 +354,12 @@ def run_pipeline(job_path: Path, resume_path: Path) -> RunRecord:
     )
 
 
-def save_run(record: RunRecord, out_dir: Path = Path("out")) -> Path:
-    """out/run_<timestamp>.json 으로 저장하고 경로를 돌려준다."""
+def save_run(record: RunRecord, base: Path = Path("out")) -> Path:
+    """run_<timestamp>.json 으로 저장하고 경로를 돌려준다.
+
+    샘플 입력이면 out/(커밋됨), 아니면 out/private/(커밋 안 됨)에 쓴다.
+    """
+    out_dir = resolve_out_dir(Path(record.resume_path), base)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"run_{record.timestamp}.json"
     path.write_text(record.model_dump_json(indent=2), encoding="utf-8")

@@ -326,7 +326,12 @@ def run_pipeline(job_path: Path, resume_path: Path) -> RunRecord:
         temperature=TEMPERATURE,
         prompt_hash=prompt_hash(),
         requirements_count=len(requirements.requirements),
+        # 지어내기율의 분모. 반드시 '검증 전'에서 센다 - 검증 후에는 가짜 quote가
+        # 이미 None으로 지워져 있어서, 지어낸 적이 없는 것처럼 보인다.
+        quotes_offered=sum(1 for e in analysis_raw.evidences if e.quote),
         demoted_count=hallucination_count,
+        # 검증 후 살아남은 근거. 게으른 모델(전부 "없음")을 잡아내는 짝 지표.
+        evidence_found=sum(1 for e in analysis.evidences if e.status in ("충분", "약함")),
         latency_s=sum(u.latency_s for u in usages),
         tokens_in=sum(u.prompt_tokens for u in usages),
         tokens_out=sum(u.completion_tokens for u in usages),

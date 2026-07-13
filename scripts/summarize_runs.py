@@ -58,41 +58,65 @@ def main() -> int:
         return 1
 
     all_runs: list[dict] = []
+    skipped: list[str] = []
     # (model, prompt_hash)로 묶는다. prompt_hash만으로 묶으면 모델이 다른 실행이
     # 한 분포에 섞여 조용히 오염된다. 같은 프롬프트라도 모델이 바뀌면 다른 실험이다.
     by_group: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for path in files:
         record = json.loads(path.read_text(encoding="utf-8"))
         summary = record["summary"]
+
+        # 구 스키마(quotes_offered 없음)는 지어내기율을 계산할 수 없다.
+        # 0으로 채워 넣으면 옛 실행이 '지어내기 0%인 정직한 모델'로 둔갑한다. 건너뛴다.
+        if "quotes_offered" not in summary:
+            skipped.append(path.name)
+            continue
+
         summary["_job"] = Path(record["job_path"]).name
         summary["_job_anon"] = anonymize(record["job_path"])
         by_group[(summary["model"], summary["prompt_hash"])].append(summary)
         all_runs.append(summary)
 
+    if skipped:
+        print(
+            f"⚠️ 구 스키마 기록 {len(skipped)}건을 건너뜁니다 "
+            f"(quotes_offered 없음 → 지어내기율 계산 불가): {', '.join(skipped)}"
+        )
+    if not all_runs:
+        print("집계할 수 있는 실행이 없습니다.")
+        return 1
+
     if len({m for m, _ in by_group}) > 1:
         print("⚠️ 서로 다른 모델의 실행이 섞여 있습니다. 아래 분포를 가로질러 비교하지 마세요.")
 
     for (model, prompt_hash), runs in by_group.items():
-        rates = [r["demoted_count"] / max(r["requirements_count"], 1) for r in runs]
+        # 두 지표를 짝으로 본다. 지어내기율만 보면 게으른 모델(quote를 아예 안 주는)이
+        # 1등을 한다. 발견율이 그것을 잡아낸다.
+        hallu = [r["demoted_count"] / max(r["quotes_offered"], 1) for r in runs]
+        found = [r["evidence_found"] / max(r["requirements_count"], 1) for r in runs]
         distinct_jobs = {r["_job"] for r in runs}
 
         print(
             f"\n{model} / prompt_hash {prompt_hash}  "
             f"({len(runs)}건 실행, 서로 다른 공고 {len(distinct_jobs)}건)"
         )
-        print("─" * 60)
+        print("─" * 72)
+        print(f"  {'공고':<16} {'지어내기':>16} {'발견율':>16} {'지연':>7} {'비용':>9}")
 
-        for run, rate in zip(runs, rates, strict=True):
+        for run, h, f in zip(runs, hallu, found, strict=True):
             print(
-                f"  {run['_job']:<16} 강등 {run['demoted_count']:>2}/{run['requirements_count']:<2} "
-                f"({rate:>5.1%})  {run['latency_s']:>5.1f}s  ${run['cost_usd']:.4f}"
+                f"  {run['_job']:<16} "
+                f"{run['demoted_count']:>3}/{run['quotes_offered']:<3}({h:>5.0%}) "
+                f"{run['evidence_found']:>3}/{run['requirements_count']:<3}({f:>5.0%}) "
+                f"{run['latency_s']:>6.1f}s ${run['cost_usd']:.4f}"
             )
 
-        print("─" * 60)
+        print("─" * 72)
         print(
-            f"  강등률 중앙값 {statistics.median(rates):.1%} | 최소 {min(rates):.1%} | 최대 {max(rates):.1%}"
+            f"  지어내기율 중앙값 {statistics.median(hallu):.0%} | "
+            f"발견율 중앙값 {statistics.median(found):.0%} | "
+            f"평균 비용 ${statistics.mean(r['cost_usd'] for r in runs):.4f}"
         )
-        print(f"  평균 비용 ${statistics.mean(r['cost_usd'] for r in runs):.4f}")
 
         # 분포를 판단하기에 표본이 부족하면 시끄럽게 알린다. (컨벤션: 조용한 실패 금지)
         if len(distinct_jobs) < 10:
@@ -100,8 +124,11 @@ def main() -> int:
                 f"  ⚠️ 서로 다른 공고가 {len(distinct_jobs)}건뿐입니다. "
                 f"D2 종료 기준은 10건입니다 — 이 분포로 판단하지 마세요."
             )
-        if all(r["demoted_count"] == 0 for r in runs):
-            print("  ⚠️ 전 실행 강등 0건. 검증이 실제로 돌고 있는지 의심하세요.")
+        if all(r["demoted_count"] == 0 for r in runs) and statistics.median(found) < 0.5:
+            print(
+                f"  ⚠️ 지어내기 0건이지만 발견율 중앙값이 {statistics.median(found):.0%}입니다. "
+                f"정직한 것인지 게으른 것인지 구분되지 않습니다."
+            )
 
     if do_export:
         export_metrics(all_runs, Path("out/metrics.jsonl"))

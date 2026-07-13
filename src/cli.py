@@ -125,22 +125,32 @@ def render(record: RunRecord) -> None:
     print()
 
     # --- 계측 ---
+    # 두 지표를 반드시 나란히 찍는다. 하나만 보면 속는다.
     s = record.summary
     print(RULE)
     print(
-        f"quote 강등: {s.demoted_count}건 / 요구사항 {s.requirements_count}개 "
-        f"({s.demotion_rate:.0%})"
+        f"quote 강등: {s.demoted_count}건 / 모델이 제시한 quote {s.quotes_offered}개 "
+        f"→ 지어내기율 {s.hallucination_rate:.0%}"
+    )
+    print(
+        f"근거 발견: {s.evidence_found}개 / 요구사항 {s.requirements_count}개 "
+        f"→ 발견율 {s.evidence_rate:.0%}"
     )
     print(
         f"지연: {s.latency_s:.1f}s | "
         f"토큰: {s.tokens_in + s.tokens_out:,} | "
         f"예상 비용: ${s.cost_usd:.4f}"
     )
-    print(f"프롬프트 해시: {s.prompt_hash} | temperature: {s.temperature}")
+    print(f"모델: {s.model} | 프롬프트 해시: {s.prompt_hash} | temperature: {s.temperature}")
 
-    # 강등률 0%는 좋은 소식처럼 보이지만 이 프로젝트에선 거의 확실히 버그다.
-    if s.demoted_count == 0:
-        print("(강등 0건 — 검증이 실제로 돌고 있는지 확인할 것)")
+    # 지어내기율 0%는 정직한 것일 수도, 게으른 것일 수도 있다. 발견율과 같이 봐야 구분된다.
+    if s.quotes_offered == 0:
+        print("(모델이 quote를 하나도 제시하지 않음 — 검증이 돌 기회조차 없었다)")
+    elif s.demoted_count == 0 and s.evidence_rate < 0.5:
+        print(
+            f"(지어내기 0건이지만 발견율이 {s.evidence_rate:.0%}로 낮음 — "
+            f"정직한 것인지 게으른 것인지 구분되지 않는다)"
+        )
 
 
 def _missing_ids(record: RunRecord) -> list[str]:

@@ -131,20 +131,45 @@ class RunSummary(BaseModel):
     prompt_hash: str  # src/prompts.py 내용의 sha256 앞 12자
 
     requirements_count: int
+    quotes_offered: int  # 모델이 quote를 제시한 건수 (검증 전). 지어내기율의 분모.
     demoted_count: int  # quote 원문 대조 실패로 강등된 건수
+    evidence_found: int  # 검증 후 살아남은 근거 (충분 + 약함)
 
     latency_s: float
     tokens_in: int
     tokens_out: int
     cost_usd: float
 
+    # 아래 두 지표는 반드시 같이 본다. 하나만 보면 반드시 속는다.
+    #
+    #   정직성만 보면 → 게으른 모델이 이긴다 (quote를 아예 안 주면 지어내기율 0%)
+    #   성실성만 보면 → 뻥쟁이 모델이 이긴다 (막 지어내면 발견율이 높다)
+
     @computed_field
     @property
-    def demotion_rate(self) -> float:
-        """강등률. 0%면 검증이 안 돌고 있는 것을 의심해야 한다."""
+    def hallucination_rate(self) -> float:
+        """지어내기율 = 강등 / **quote 제시 수**. 낮을수록 정직하다.
+
+        분모가 requirements_count이면 안 된다. 모델이 "없음"이라고 답한 요구사항에는
+        애초에 지어낼 기회가 없었다. 11개 중 3개만 quote를 냈고 1개가 가짜라면
+        실제 지어내기율은 33%(1/3)이지, 9%(1/11)가 아니다.
+        분모를 키우면 실제보다 안전해 보인다 - 조용한 품질 저하다.
+        """
+        if self.quotes_offered == 0:
+            return 0.0
+        return self.demoted_count / self.quotes_offered
+
+    @computed_field
+    @property
+    def evidence_rate(self) -> float:
+        """근거 발견율 = 살아남은 근거 / 요구사항. 높을수록 성실하다.
+
+        지어내기율과 짝으로 본다. 이 값이 낮으면서 지어내기율이 0%인 모델은
+        정직한 것이 아니라 게으른 것이다 - 아무것도 안 찾고 전부 "없음"이라 답한 것.
+        """
         if self.requirements_count == 0:
             return 0.0
-        return self.demoted_count / self.requirements_count
+        return self.evidence_found / self.requirements_count
 
 
 class RunRecord(BaseModel):

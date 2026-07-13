@@ -15,6 +15,7 @@ import os
 import time
 from collections import defaultdict, deque
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError, AuthenticationError
@@ -23,6 +24,16 @@ from pydantic import BaseModel, Field
 from src import events
 from src.pipeline import InputTooLongError, LLMParseError, analyze, select_top_gaps
 from src.schemas import MAX_JOB_CHARS, MAX_RESUME_CHARS, RunRecord
+
+# 로컬 개발용. 배포(Railway)에서는 환경변수로 주입되며 .env는 없다.
+load_dotenv()
+
+# 설정 누락은 기동 시점에 죽는다. 요청마다 500을 뱉게 두면, 배포는 "성공"인데
+# 첫 유저가 빈 에러를 받는다. 헬스체크가 통과하면 안 되는 상태다.
+if not os.getenv("OPENAI_API_KEY"):
+    raise RuntimeError(
+        "OPENAI_API_KEY가 없습니다. 로컬은 .env에, Railway는 환경변수에 설정하세요."
+    )
 
 app = FastAPI(title="jd-gap-analyzer")
 
@@ -190,6 +201,12 @@ def analyze_endpoint(body: AnalyzeRequest, request: Request, response: Response)
         events.log_event("error", sid, error_kind="openai_api")
         response.status_code = 502
         return {"error": "일시적인 오류입니다. 잠시 후 다시 시도해주세요."}
+    except Exception as exc:  # noqa: BLE001 - 예상 못 한 예외도 반드시 이벤트로 남긴다
+        # 잡지 않으면 빈 500이 나간다. 유저는 아무 설명도 못 받고, 로그에도 안 남아
+        # 무슨 일이 일어났는지 영원히 모른다. 조용한 실패 금지(컨벤션 1조).
+        events.log_event("error", sid, error_kind=f"unexpected:{type(exc).__name__}")
+        response.status_code = 500
+        return {"error": "알 수 없는 오류가 발생했습니다."}
 
     s = record.summary
     events.log_event(

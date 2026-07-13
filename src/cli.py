@@ -14,7 +14,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import APIError, AuthenticationError
 
-from .pipeline import InputTooLongError, LLMParseError, run_pipeline, save_run
+from .pipeline import (
+    InputTooLongError,
+    LLMParseError,
+    run_pipeline,
+    save_run,
+    select_top_gaps,
+)
 from .schemas import Evidence, Requirement, RunRecord
 
 RULE = "─" * 25
@@ -89,6 +95,19 @@ def render(record: RunRecord) -> None:
                 print(f"     • {bullet}")
     print()
 
+    # --- 그 외 근거 없는 항목 ---
+    # Top 3만 출력하면 '필수인데 근거 없는' 항목이 4개 이상일 때 나머지가 조용히 사라진다.
+    # 갭을 드러내려고 만든 도구가 갭을 숨기게 된다. (컨벤션 1조: 조용한 실패 금지)
+    # 보완 bullet은 Top 3에만 만든다 - 여기서는 존재만 알린다.
+    rest = [rid for rid in _missing_ids(record) if rid not in record.top_gap_ids]
+    if rest:
+        print(f"그 외 근거 없는 항목 ({len(rest)}개)")
+        print(RULE)
+        for rid in rest:
+            req = reqs[rid]
+            print(f"- {req.text} ({req.category})")
+        print()
+
     # --- 근거 있는 항목 ---
     strong = [e for e in record.analysis.evidences if e.status == "충분"]
     print(f"✅ 근거 있는 항목 ({len(strong)}개)")
@@ -122,6 +141,20 @@ def render(record: RunRecord) -> None:
     # 강등률 0%는 좋은 소식처럼 보이지만 이 프로젝트에선 거의 확실히 버그다.
     if s.demoted_count == 0:
         print("(강등 0건 — 검증이 실제로 돌고 있는지 확인할 것)")
+
+
+def _missing_ids(record: RunRecord) -> list[str]:
+    """status="없음"인 요구사항 id 전부. 우선순위 순서(필수 > 우대, 기술/경험 > ...).
+
+    정렬 규칙을 여기 복붙하지 않고 select_top_gaps()를 그대로 쓴다.
+    두 곳에 같은 우선순위 로직이 있으면 나중에 한쪽만 고쳐서 조용히 어긋난다.
+    """
+    all_gaps = select_top_gaps(
+        record.requirements.requirements,
+        record.analysis,
+        n=len(record.requirements.requirements),
+    )
+    return [r.id for r in all_gaps]
 
 
 def _print_evidence(ev: Evidence, reqs: dict[str, Requirement]) -> None:

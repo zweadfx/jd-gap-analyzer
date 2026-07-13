@@ -21,22 +21,14 @@ MIN_REQUIREMENTS = 8
 MAX_REQUIREMENTS = 15
 BULLETS_PER_GAP = 2
 
-# D2에 측정 후 확정. 사전에 박아둔 결정 규칙(CONVENTIONS.md)을 그대로 적용한 결과다.
-#   규칙1 지어내기율: 4o-mini 0% / 5.4-nano 0% → 무승부
-#   규칙2 Step1 안정성: 둘 다 count·category 안정 (5.4-mini는 여기서 실격)
-#   규칙3 노이즈 밴드 안 구분 불가 → 지연·비용으로 결정 → 5.4-nano (14.1s → 8.7s)
-# 발견율은 50% vs 42%로 4o-mini가 높아 보였지만, 차이 8%p가 노이즈 밴드 9%p 안이라
-# 검출 불가다. "높아 보이니 저쪽"으로 뒤집으면 그게 사후 합리화다.
-MODEL = "gpt-5.4-nano"
+MODEL = "gpt-4o-mini"
 
-# temperature=0은 재현성을 보장하지 않는다(D2 실측). 그래도 0으로 두는 이유는
-# 노이즈를 줄이기는 하기 때문이다. 다만 "고정했으니 재현된다"고 믿지 않는다.
+# 재현성. 프롬프트를 고친 효과를 보려면 샘플링 노이즈를 없애야 한다.
 TEMPERATURE = 0.0
 
-# gpt-5.4-nano 단가 (USD / 1M tokens). 비용 추정에만 쓴다.
-# MODEL을 바꾸면 이 두 줄도 반드시 같이 바꾼다. 안 바꾸면 cost_usd가 조용히 틀린다.
-PRICE_INPUT_PER_1M = 0.20
-PRICE_OUTPUT_PER_1M = 1.25
+# gpt-4o-mini 단가 (USD / 1M tokens). 비용 추정에만 쓴다.
+PRICE_INPUT_PER_1M = 0.15
+PRICE_OUTPUT_PER_1M = 0.60
 
 
 # ---------------------------------------------------------------------------

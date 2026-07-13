@@ -58,21 +58,27 @@ def main() -> int:
         return 1
 
     all_runs: list[dict] = []
-    by_prompt: dict[str, list[dict]] = defaultdict(list)
+    # (model, prompt_hash)로 묶는다. prompt_hash만으로 묶으면 모델이 다른 실행이
+    # 한 분포에 섞여 조용히 오염된다. 같은 프롬프트라도 모델이 바뀌면 다른 실험이다.
+    by_group: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for path in files:
         record = json.loads(path.read_text(encoding="utf-8"))
         summary = record["summary"]
         summary["_job"] = Path(record["job_path"]).name
         summary["_job_anon"] = anonymize(record["job_path"])
-        by_prompt[summary["prompt_hash"]].append(summary)
+        by_group[(summary["model"], summary["prompt_hash"])].append(summary)
         all_runs.append(summary)
 
-    for prompt_hash, runs in by_prompt.items():
+    if len({m for m, _ in by_group}) > 1:
+        print("⚠️ 서로 다른 모델의 실행이 섞여 있습니다. 아래 분포를 가로질러 비교하지 마세요.")
+
+    for (model, prompt_hash), runs in by_group.items():
         rates = [r["demoted_count"] / max(r["requirements_count"], 1) for r in runs]
         distinct_jobs = {r["_job"] for r in runs}
 
         print(
-            f"\nprompt_hash {prompt_hash}  ({len(runs)}건 실행, 서로 다른 공고 {len(distinct_jobs)}건)"
+            f"\n{model} / prompt_hash {prompt_hash}  "
+            f"({len(runs)}건 실행, 서로 다른 공고 {len(distinct_jobs)}건)"
         )
         print("─" * 60)
 

@@ -117,13 +117,14 @@ export default function Page() {
 
   return (
     <main className="wrap">
-      <h1>공고가 요구하는데, 내 이력서에 없는 것</h1>
+      <h1>공고가 요구하는데, 내 문서에 없는 것</h1>
       <p className="lede">
-        채용 공고와 이력서를 붙여넣으면 <strong>근거가 없는 항목 Top 3</strong>을 찾아줍니다.
+        채용 공고와 <strong>이력서 또는 포트폴리오</strong>를 붙여넣으면,{" "}
+        <strong>근거가 없는 항목 Top 3</strong>을 찾아줍니다.
       </p>
       <p className="lede">
-        이력서를 대신 고쳐주지 않습니다. <strong>무엇이 비어 있는지</strong>만 보여줍니다 — 당신이
-        이력서를 보고 5초 만에 맞는지 틀린지 확인할 수 있도록.
+        문장을 대신 써주거나 점수를 매기지 않습니다. <strong>무엇이 비어 있는지</strong>만
+        보여줍니다 — 당신이 문서를 보고 5초 만에 맞는지 틀린지 확인할 수 있도록.
       </p>
 
       <form onSubmit={submit}>
@@ -144,7 +145,7 @@ export default function Page() {
 
         <div>
           <label htmlFor="resume">
-            내 이력서
+            내 이력서 또는 포트폴리오
             <span className={`count ${resumeOver ? "over" : ""}`}>
               {resume.length.toLocaleString()} / {MAX_RESUME.toLocaleString()}
             </span>
@@ -153,7 +154,7 @@ export default function Page() {
             id="resume"
             value={resume}
             onChange={(e) => setResume(e.target.value)}
-            placeholder="이력서 전문을 붙여넣으세요. 저장하지 않습니다."
+            placeholder="이력서나 포트폴리오 전문을 붙여넣으세요. 저장하지 않습니다."
           />
         </div>
 
@@ -230,7 +231,7 @@ export default function Page() {
           {result.evidence.length > 0 && (
             <>
               <h2>근거가 있는 항목 ({result.evidence.length}개)</h2>
-              <p className="sub">아래 인용문은 이력서 원문과 대조해 실재를 확인한 것입니다.</p>
+              <p className="sub">아래 인용문은 당신 문서의 원문과 대조해 실재를 확인한 것입니다.</p>
               {result.evidence.map((e) => (
                 <div className="row" key={e.id}>
                   <span className="tag">{e.status}</span>
@@ -267,11 +268,11 @@ export default function Page() {
       )}
 
       <p className="note">
-        이력서는 저장하지 않습니다. 분석에만 쓰이고 서버에 파일로 남지 않습니다.
+        붙여넣은 문서는 저장하지 않습니다. 분석에만 쓰이고 서버에 파일로 남지 않습니다.
         <br />
-        LLM은 그럴듯한 인용문을 지어냅니다. 그래서 모델이 준 인용문을 이력서 원문과 글자 단위로
-        대조해, 원문에 없으면 근거로 인정하지 않고 버립니다. 위에 표시된 &lsquo;버린 인용&rsquo;
-        건수가 그것입니다.
+        LLM은 그럴듯한 인용문을 지어냅니다. 그래서 모델이 준 인용문을 당신 문서의 원문과 글자
+        단위로 대조해, 원문에 없으면 근거로 인정하지 않고 버립니다. 위에 표시된 &lsquo;버린
+        인용&rsquo; 건수가 그것입니다.
       </p>
     </main>
   );

@@ -14,13 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import APIError, AuthenticationError
 
-from .pipeline import (
-    InputTooLongError,
-    LLMParseError,
-    run_pipeline,
-    save_run,
-    select_top_gaps,
-)
+from .pipeline import InputTooLongError, LLMParseError, run_pipeline, save_run
 from .schemas import Evidence, Requirement, RunRecord
 
 RULE = "─" * 25
@@ -154,17 +148,12 @@ def render(record: RunRecord) -> None:
 
 
 def _missing_ids(record: RunRecord) -> list[str]:
-    """status="없음"인 요구사항 id 전부. 우선순위 순서(필수 > 우대, 기술/경험 > ...).
+    """근거 없는 항목 id 전부, 우선순위 순.
 
-    정렬 규칙을 여기 복붙하지 않고 select_top_gaps()를 그대로 쓴다.
-    두 곳에 같은 우선순위 로직이 있으면 나중에 한쪽만 고쳐서 조용히 어긋난다.
+    순위는 run_pipeline이 이미 계산해 ranked_gap_ids에 담았다(공고 원문 위치가
+    필요한데 여기선 job_text가 없다). 정렬 로직을 두 곳에 두면 조용히 어긋난다.
     """
-    all_gaps = select_top_gaps(
-        record.requirements.requirements,
-        record.analysis,
-        n=len(record.requirements.requirements),
-    )
-    return [r.id for r in all_gaps]
+    return record.ranked_gap_ids
 
 
 def _print_evidence(ev: Evidence, reqs: dict[str, Requirement]) -> None:

@@ -25,7 +25,7 @@ from openai import APIError, AuthenticationError
 from pydantic import BaseModel, Field
 
 from src import events
-from src.pipeline import InputTooLongError, LLMParseError, analyze, select_top_gaps
+from src.pipeline import InputTooLongError, LLMParseError, analyze
 from src.schemas import MAX_JOB_CHARS, MAX_RESUME_CHARS, RunRecord
 
 # 로컬 개발용. 배포에서는 환경변수로 주입되며 .env는 없다.
@@ -93,10 +93,8 @@ def to_response(record: RunRecord) -> dict:
     bullets = {s.requirement_id: s.bullets for s in record.suggestions.suggestions}
 
     # "그 외 근거 없는 항목"도 내려준다. Top3만 주면 필수 갭이 조용히 사라진다.
-    all_gaps = select_top_gaps(
-        record.requirements.requirements, record.analysis, n=len(record.requirements.requirements)
-    )
-    rest = [g.id for g in all_gaps if g.id not in record.top_gap_ids]
+    # 순위는 run_pipeline이 이미 계산했다(공고 원문 위치 기반). 여기서 다시 정렬하지 않는다.
+    rest = [rid for rid in record.ranked_gap_ids if rid not in record.top_gap_ids]
 
     def item(rid: str, with_bullets: bool = False) -> dict:
         r, e = reqs[rid], evs.get(rid)

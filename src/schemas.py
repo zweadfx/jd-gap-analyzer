@@ -209,6 +209,10 @@ class RunRecord(BaseModel):
     suggestions: Suggestions
 
     top_gap_ids: list[str]
+    # 근거 없는 항목 전부를 우선순위 순으로. Top3에서 차단된 항목(조건완화/인성)도
+    # 뒤쪽에 포함된다 — 버리지 않는다. cli/api가 "그 외" 목록을 여기서 만든다.
+    # 순위 계산은 job_text가 있는 run_pipeline에서 한 번만 한다(로직 중복 방지).
+    ranked_gap_ids: list[str] = Field(default_factory=list)
     hallucination_count: int
     usages: list[StepUsage]
 

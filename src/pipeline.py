@@ -11,7 +11,9 @@
 
 import hashlib
 import json
+import re
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -231,28 +233,140 @@ CATEGORY_RANK = {"필수": 0, "우대": 1}
 KIND_RANK = {"기술": 0, "경험": 0, "도메인": 1, "소프트스킬": 2}
 
 
-def select_top_gaps(
-    requirements: list[Requirement], analysis: GapAnalysis, n: int = 3
-) -> list[Requirement]:
-    """status="없음"인 항목을 우선순위로 정렬해 상위 n개.
+# --- Top 3 진입 차단 필터 (코드가 막는다. 프롬프트를 믿지 않는다) ---
+#
+# 프롬프트에 "인성 항목 제외", "조건 완화 문구 제외"를 넣었는데도 뚫린다.
+# 실측: job04 2회차 Top 3에 "학력무관, 경력무관"이 실제로 올라왔다.
+# quote 검증과 같은 원칙 — 프롬프트로 지시하고, 코드로 검사한다.
+#
+# **조용히 거르지 않는다.** 걸러낸 항목은 warnings에 남기고 "그 외" 목록에는 그대로 둔다.
+# Top 3에서만 뺀다. 조용한 필터는 컨벤션 1조 위반이다.
 
-    우선순위: 필수 > 우대, 그리고 기술/경험 > 도메인 > 소프트스킬.
-    동점이면 공고에 먼저 나온 순서로 안정 정렬한다.
+# 조건 완화 문구: 요구사항이 아니라 "요구사항이 없다"는 선언이다.
+_RELAX_TOKEN = re.compile(r"(학력|경력|전공|나이|성별|연령)\s*무관|무관\s*$|경력\s*무관")
+
+# 실질 요건을 함께 담고 있으면 지우면 안 된다.
+# "이공계(전공 무관) 석사 이상"은 진짜 요구사항이다 — "석사 이상"이 실질이다.
+_SUBSTANTIVE = re.compile(
+    r"[A-Za-z]{2,}|\d\s*년|석사|박사|학사|경험|구축|개발|운영|설계|구현|능숙|이상"
+)
+
+# 인성 항목: 지원 문서에서 문장으로 인용할 수 없는 것들.
+# 실제 공고에서 나온 문구만 넣는다. 넓게 잡으면 진짜 요구사항을 죽인다 —
+# "전 주기를 주도적으로 수행", "영어 커뮤니케이션 능력"은 검증 가능한 항목이라 건드리지 않는다.
+_PERSONALITY = re.compile(
+    r"오픈\s*마인드|책임감\s*있게|창의적인\s*의견|피드백을\s*수용"
+    r"|열정적|성실한\s*분|함께\s*성장|긍정적인\s*(자세|태도)|유연한\s*사고"
+)
+
+
+def _blocked_from_top3(text: str) -> str | None:
+    """Top 3에 올리면 안 되는 항목이면 이유를, 아니면 None.
+
+    보수적으로 잡는다. 애매하면 통과시킨다 — 진짜 요구사항을 Top 3에서 빼는 것이
+    무의미한 항목 하나를 남기는 것보다 나쁘다(거짓 갭이 아니라 갭 은폐가 된다).
+    """
+    if _RELAX_TOKEN.search(text) and not _SUBSTANTIVE.search(text):
+        return "조건 완화 문구 (요구사항이 아니라 요구사항이 없다는 선언)"
+    if _PERSONALITY.search(text):
+        return "검증 불가능한 인성 항목 (지원 문서에서 인용할 수 없다)"
+    return None
+
+
+def _source_position(text: str, job_text: str) -> int:
+    """이 요구사항이 공고 원문의 몇 번째 줄에서 왔는가. **결정적인 키다.**
+
+    기존 타이브레이커는 `order[r.id]` — LLM이 뱉은 리스트의 인덱스였다.
+    docstring은 "공고에 먼저 나온 순서"라고 주장했지만 거짓이었다.
+    실측: 같은 입력 2회 실행에서 리스트 순서가 19건 뒤집혔고, 그 결과
+    Top 3의 2/3이 실행마다 바뀌었다(무작위 추출과 구별되지 않는 수준).
+
+    공고 원문에서의 위치는 LLM 출력이 아니라 **입력**이므로 절대 흔들리지 않는다.
+    요구사항 텍스트는 LLM이 바꿔 쓰지만, 어느 줄에서 왔는지는 토큰 겹침으로 찾는다.
+    """
+    lines = job_text.splitlines()
+    want = _tokens(text)
+    if not want:
+        return len(lines)
+    best_i, best_score = len(lines), 0.0
+    for i, line in enumerate(lines):
+        have = _tokens(line)
+        if not have:
+            continue
+        score = len(want & have) / len(want | have)
+        if score > best_score:
+            best_score, best_i = score, i
+    return best_i
+
+
+def _tokens(text: str) -> set[str]:
+    t = unicodedata.normalize("NFKC", text).lower()
+    t = re.sub(r"[^\w가-힣]+", " ", t)
+    return {w for w in t.split() if len(w) >= 2}
+
+
+def rank_gaps(
+    requirements: list[Requirement],
+    analysis: GapAnalysis,
+    job_text: str = "",
+) -> tuple[list[Requirement], list[Requirement], list[str]]:
+    """근거 없는 항목을 우선순위로 정렬한다. LLM을 쓰지 않는다.
+
+    우선순위: 필수 > 우대, 기술/경험 > 도메인 > 소프트스킬,
+    동점이면 **공고 원문의 등장 순서**(LLM 출력이 아니라 입력이므로 결정적이다).
 
     verify 이후에 호출해야 한다 — 강등된 항목이 후보에 포함되어야 하기 때문.
+
+    Returns:
+        (eligible, blocked, warnings)
+        blocked는 **버리지 않는다.** Top 3에만 못 올라갈 뿐, "그 외" 목록에는 그대로 나온다.
+        조용히 지우면 그것이야말로 갭 은폐다. (컨벤션 1조: 조용한 실패 금지)
     """
     missing_ids = {ev.requirement_id for ev in analysis.evidences if ev.status == "없음"}
     gaps = [r for r in requirements if r.id in missing_ids]
 
-    order = {r.id: i for i, r in enumerate(requirements)}
-    gaps.sort(
-        key=lambda r: (
+    warnings: list[str] = []
+    eligible: list[Requirement] = []
+    blocked: list[Requirement] = []
+    for r in gaps:
+        reason = _blocked_from_top3(r.text)
+        if reason:
+            blocked.append(r)
+            warnings.append(f'[{r.id}] Top 3에서 제외: {reason} — "{r.text[:40]}"')
+        else:
+            eligible.append(r)
+
+    # 타이브레이커: LLM 리스트 순서가 아니라 공고 원문 위치.
+    # job_text가 없으면(구 호출부) 폴백으로 리스트 순서를 쓴다 — 흔들리는 키다.
+    fallback = {r.id: i for i, r in enumerate(requirements)}
+
+    def sort_key(r: Requirement) -> tuple:
+        pos = _source_position(r.text, job_text) if job_text else fallback[r.id]
+        return (
             CATEGORY_RANK.get(r.category, 9),
             KIND_RANK.get(r.kind, 9),
-            order[r.id],
+            pos,
+            r.text,  # 위치까지 같으면 텍스트로. 완전 결정적으로 만든다.
         )
-    )
-    return gaps[:n]
+
+    eligible.sort(key=sort_key)
+    blocked.sort(key=sort_key)
+    return eligible, blocked, warnings
+
+
+def select_top_gaps(
+    requirements: list[Requirement],
+    analysis: GapAnalysis,
+    n: int = 3,
+    job_text: str = "",
+) -> tuple[list[Requirement], list[str]]:
+    """Top n. **차단된 항목은 절대 여기 들어오지 않는다.**
+
+    eligible이 n개보다 적으면 그만큼만 낸다. 무의미한 항목으로 자리를 채우느니
+    빈 자리가 낫다 — 유저가 보는 3칸은 이 제품의 전부다.
+    """
+    eligible, _blocked, warnings = rank_gaps(requirements, analysis, job_text)
+    return eligible[:n], warnings
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +462,11 @@ def analyze(
     warnings.extend(verify_warnings)
 
     # --- Top 3 선정: 코드가 한다 ---
-    top_gaps = select_top_gaps(requirements.requirements, analysis)
+    eligible, blocked, top3_warnings = rank_gaps(
+        requirements.requirements, analysis, job_text=job_text
+    )
+    top_gaps = eligible[:3]
+    warnings.extend(top3_warnings)
 
     # --- Step 3: 보완 bullet ---
     suggestions, usage3, raw3, prompt3 = generate_suggestions(
@@ -396,6 +514,7 @@ def analyze(
         analysis_before_verify=analysis_raw,
         suggestions=suggestions,
         top_gap_ids=[r.id for r in top_gaps],
+        ranked_gap_ids=[r.id for r in eligible] + [r.id for r in blocked],
         hallucination_count=hallucination_count,
         usages=usages,
         warnings=warnings,

@@ -8,14 +8,26 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const MAX_JOB = 8000;
 const MAX_RESUME = 12000;
 
-// 분석에 14~23초 걸린다. 빈 스피너를 20초 보여주면 이탈한다.
-// 무엇을 하고 있는지 보여준다. 각 단계는 실제 파이프라인의 Step과 1:1이다.
+// 3단계. 파이프라인의 Step 1/2/3과 1:1이다 — Step을 쪼갠 설계가 여기서 UX 배당금을 낸다.
+// 빈 스피너를 10초 보여주면 이탈한다. 무엇을 하고 있는지 보여준다.
 const STEPS = [
-  "공고에서 요구사항을 뽑는 중 (이력서는 아직 보지 않습니다)",
-  "이력서에서 근거 문장을 찾는 중",
-  "인용문이 이력서 원문에 실제로 있는지 대조하는 중",
+  "공고에서 요구사항을 뽑는 중 (문서는 아직 보지 않습니다)",
+  "문서에서 근거 문장을 찾고, 원문에 실제로 있는지 대조하는 중",
   "근거 없는 항목의 보완 방향을 정리하는 중",
 ];
+
+// 브라우저마다 하나. localStorage에 둔다 — 쿠키는 Vercel↔Railway 간 서드파티가 되어
+// Safari/Firefox에 차단된다. 그러면 재방문을 영영 이을 수 없다.
+// 첫 배포부터 넣어야 한다. 나중에 추가하면 그 전 방문자는 재방문으로 못 잇는다.
+function getAnonId(): string {
+  const KEY = "jd_anon_id";
+  let id = localStorage.getItem(KEY);
+  if (!id) {
+    id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+    localStorage.setItem(KEY, id);
+  }
+  return id;
+}
 
 type Gap = {
   id: string;
@@ -61,22 +73,25 @@ export default function Page() {
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch(`${API}/events/view`, { method: "POST", credentials: "include" }).catch(() => {});
+    fetch(`${API}/events/page_view`, {
+      method: "POST",
+      headers: { "X-Anon-Id": getAnonId() },
+    }).catch(() => {});
   }, []);
 
   // 단계 진행은 실제 진행률이 아니라 추정이다. 서버가 단계를 스트리밍하지 않는다.
   // 정직하게 말하면 이것은 연출이다 — 다만 각 문구는 실제로 그 시각에 서버가 하는 일이다.
   //
-  // 경계값은 실측에서 왔다 (gpt-4o-mini 전체 23~32초):
-  //   Step1 ~9s, Step2 ~8s, 검증 ~0s(코드), Step3 ~6s
-  // 추측으로 쓰면 유저가 "다 됐네" 하고 기다리다 배신당한다. 재보고 고칠 것.
+  // 경계값은 전체 파이프라인 실측에서 왔다 (gpt-5.4-nano, 실제 공고 14.8~19.6초).
+  // 주의: 베이스라인의 10.0초는 Step1+Step2만 잰 값이었다. Step3(보완 bullet)이 빠져 있었다.
+  // 추측으로 쓰면 유저가 "다 됐네" 하고 기다리다 배신당한다.
   useEffect(() => {
     if (!loading) return;
     const t0 = Date.now();
     const timer = setInterval(() => {
       const s = (Date.now() - t0) / 1000;
       setElapsed(s);
-      setStep(s < 10 ? 0 : s < 19 ? 1 : s < 21 ? 2 : 3);
+      setStep(s < 6 ? 0 : s < 12 ? 1 : 2);
     }, 200);
     return () => clearInterval(timer);
   }, [loading]);
@@ -95,8 +110,7 @@ export default function Page() {
     try {
       const res = await fetch(`${API}/analyze`, {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
         body: JSON.stringify({ job, resume }),
       });
       const data = await res.json();
@@ -154,7 +168,7 @@ export default function Page() {
             id="resume"
             value={resume}
             onChange={(e) => setResume(e.target.value)}
-            placeholder="이력서나 포트폴리오 전문을 붙여넣으세요. 저장하지 않습니다."
+            placeholder="이력서 또는 포트폴리오를 붙여넣으세요. 저장하지 않습니다."
           />
         </div>
 
@@ -179,8 +193,8 @@ export default function Page() {
             </div>
           ))}
           <div className="elapsed">
-            {elapsed.toFixed(0)}초 경과 · 보통 25~35초 걸립니다
-            {elapsed > 45 && " · 평소보다 오래 걸리고 있습니다"}
+            {elapsed.toFixed(0)}초 경과 · 보통 15~20초 걸립니다
+            {elapsed > 30 && " · 평소보다 오래 걸리고 있습니다"}
           </div>
         </div>
       )}

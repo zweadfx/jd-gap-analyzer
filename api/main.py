@@ -1,14 +1,17 @@
 """FastAPI — 웹에서 파이프라인을 호출한다.
 
-프론트(Vercel)와 분리된 서비스다. 배포는 이쪽을 먼저 띄워 URL을 확보한다.
+프론트(Vercel)와 분리된 서비스다(Railway). 배포는 이쪽을 먼저 띄워 URL을 확보한다.
 
 **파이프라인을 두 벌로 만들지 않는다.** CLI와 똑같이 src.pipeline.analyze()를 부른다.
 웹용 사본을 만들면 웹에서만 나는 버그가 생기고, 프롬프트를 고칠 때 한쪽을 빠뜨린다.
 
-**응답과 로그에 이력서 원문을 남기지 않는다.**
-- RunRecord는 프롬프트(=이력서 전문)와 원본 응답을 들고 있다. 그대로 반환하면 유출이다.
-- 그래서 to_response()가 유저에게 보여줄 것만 골라 새 dict를 만든다.
-- save_run()도 부르지 않는다. 서버에 유저 이력서를 파일로 쌓지 않는다.
+**응답과 로그에 지원 문서 원문을 남기지 않는다.**
+- RunRecord는 프롬프트(=문서 전문)와 원본 응답을 들고 있다. 그대로 반환하면 유출이다.
+- to_response()가 유저에게 보여줄 것만 골라 새 dict를 만든다.
+- save_run()도 부르지 않는다. 서버에 유저 문서를 파일로 쌓지 않는다.
+
+**anon_id는 프론트가 localStorage에서 만들어 헤더로 보낸다.** 쿠키가 아니다.
+Vercel과 Railway는 다른 도메인이라 쿠키가 서드파티가 되어 브라우저에 차단된다.
 """
 
 import os
@@ -16,7 +19,7 @@ import time
 from collections import defaultdict, deque
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError, AuthenticationError
 from pydantic import BaseModel, Field
@@ -25,28 +28,24 @@ from src import events
 from src.pipeline import InputTooLongError, LLMParseError, analyze, select_top_gaps
 from src.schemas import MAX_JOB_CHARS, MAX_RESUME_CHARS, RunRecord
 
-# 로컬 개발용. 배포(Railway)에서는 환경변수로 주입되며 .env는 없다.
+# 로컬 개발용. 배포에서는 환경변수로 주입되며 .env는 없다.
 load_dotenv()
 
-# 설정 누락은 기동 시점에 죽는다. 요청마다 500을 뱉게 두면, 배포는 "성공"인데
+# 설정 누락은 기동 시점에 죽는다. 요청마다 500을 뱉게 두면 배포는 "성공"인데
 # 첫 유저가 빈 에러를 받는다. 헬스체크가 통과하면 안 되는 상태다.
 if not os.getenv("OPENAI_API_KEY"):
-    raise RuntimeError(
-        "OPENAI_API_KEY가 없습니다. 로컬은 .env에, Railway는 환경변수에 설정하세요."
-    )
+    raise RuntimeError("OPENAI_API_KEY가 없습니다. 로컬은 .env, 배포는 환경변수에 설정하세요.")
 
 app = FastAPI(title="jd-gap-analyzer")
 
-# Vercel 프론트에서 부른다. 배포 후 실제 도메인으로 좁힐 것.
 ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "X-Anon-Id"],
 )
 
 # --- 레이트리밋: IP당 하루 5회 (컨벤션 7장) ---
@@ -58,12 +57,10 @@ RATE_LIMIT = int(os.getenv("RATE_LIMIT_PER_DAY", "5"))
 RATE_WINDOW_S = 24 * 3600
 _hits: dict[str, deque[float]] = defaultdict(deque)
 
-SID_COOKIE = "sid"
-
 
 class AnalyzeRequest(BaseModel):
     job: str = Field(description="채용 공고 원문")
-    resume: str = Field(description="이력서 원문")
+    resume: str = Field(description="지원 문서(이력서 또는 포트폴리오) 원문")
 
 
 def client_ip(request: Request) -> str:
@@ -85,20 +82,10 @@ def rate_limited(ip: str) -> bool:
     return False
 
 
-def get_sid(request: Request, response: Response) -> str:
-    sid = request.cookies.get(SID_COOKIE)
-    if not sid:
-        sid = events.new_session_id()
-        response.set_cookie(
-            SID_COOKIE, sid, max_age=90 * 24 * 3600, httponly=True, samesite="lax", secure=True
-        )
-    return sid
-
-
 def to_response(record: RunRecord) -> dict:
     """유저에게 보낼 것만 고른다.
 
-    RunRecord에는 prompts(=이력서 전문)와 raw_responses가 들어 있다.
+    RunRecord에는 prompts(=지원 문서 전문)와 raw_responses가 들어 있다.
     통째로 반환하면 유출이다. 화이트리스트로 새로 만든다.
     """
     reqs = {r.id: r for r in record.requirements.requirements}
@@ -144,9 +131,7 @@ def to_response(record: RunRecord) -> dict:
             "requirements_count": s.requirements_count,
             "quotes_offered": s.quotes_offered,
             "demoted_count": s.demoted_count,
-            "hallucination_rate": s.hallucination_rate,
             "evidence_found": s.evidence_found,
-            "evidence_rate": s.evidence_rate,
             "latency_s": s.latency_s,
             "model": s.model,
         },
@@ -159,26 +144,27 @@ def health() -> dict:
     return {"ok": True, "limits": {"job": MAX_JOB_CHARS, "resume": MAX_RESUME_CHARS}}
 
 
-@app.post("/events/view")
-def track_view(request: Request, response: Response) -> dict:
-    """랜딩 도착. 같은 sid가 24h 이전에 온 적이 있으면 재방문으로도 기록한다."""
-    existing = request.cookies.get(SID_COOKIE)
-    sid = get_sid(request, response)
-    if existing and events.is_revisit(sid):
-        events.log_event("revisit", sid)
-    events.log_event("view", sid)
-    return {"sid": sid}
+@app.post("/events/page_view")
+def track_page_view(x_anon_id: str = Header(default="")) -> dict:
+    """랜딩 도착. 재방문은 로그에서 유도한다(같은 anon_id의 page_view가 다른 날에 있으면)."""
+    events.log_event("page_view", x_anon_id or events.new_anon_id())
+    return {"ok": True}
 
 
 @app.post("/analyze")
-def analyze_endpoint(body: AnalyzeRequest, request: Request, response: Response) -> dict:
-    sid = get_sid(request, response)
+def analyze_endpoint(
+    body: AnalyzeRequest,
+    request: Request,
+    response: Response,
+    x_anon_id: str = Header(default=""),
+) -> dict:
+    anon_id = x_anon_id or events.new_anon_id()
     ip = client_ip(request)
 
-    events.log_event("submit", sid, job_chars=len(body.job), resume_chars=len(body.resume))
+    events.log_event("submit", anon_id, job_chars=len(body.job), resume_chars=len(body.resume))
 
     if rate_limited(ip):
-        events.log_event("error", sid, error_kind="rate_limited")
+        events.log_event("error", anon_id, error_kind="rate_limited")
         response.status_code = 429
         return {"error": f"하루 {RATE_LIMIT}회까지 사용할 수 있습니다. 내일 다시 시도해주세요."}
 
@@ -186,32 +172,32 @@ def analyze_endpoint(body: AnalyzeRequest, request: Request, response: Response)
         record = analyze(body.job, body.resume)
     except InputTooLongError as exc:
         # 자동으로 자르지 않는다. 시끄럽게 실패한다. (컨벤션 1조)
-        events.log_event("error", sid, error_kind="input_too_long")
+        events.log_event("error", anon_id, error_kind="input_too_long")
         response.status_code = 400
         return {"error": str(exc)}
-    except LLMParseError as exc:
-        events.log_event("error", sid, error_kind="llm_parse_failed")
+    except LLMParseError:
+        events.log_event("error", anon_id, error_kind="llm_parse_failed")
         response.status_code = 502
-        return {"error": f"분석에 실패했습니다. 다시 시도해주세요. ({exc})"}
+        return {"error": "분석에 실패했습니다. 잠시 후 다시 시도해주세요."}
     except AuthenticationError:
-        events.log_event("error", sid, error_kind="auth")
+        events.log_event("error", anon_id, error_kind="auth")
         response.status_code = 500
         return {"error": "서버 설정 오류입니다."}
     except APIError:
-        events.log_event("error", sid, error_kind="openai_api")
+        events.log_event("error", anon_id, error_kind="openai_api")
         response.status_code = 502
         return {"error": "일시적인 오류입니다. 잠시 후 다시 시도해주세요."}
     except Exception as exc:  # noqa: BLE001 - 예상 못 한 예외도 반드시 이벤트로 남긴다
-        # 잡지 않으면 빈 500이 나간다. 유저는 아무 설명도 못 받고, 로그에도 안 남아
-        # 무슨 일이 일어났는지 영원히 모른다. 조용한 실패 금지(컨벤션 1조).
-        events.log_event("error", sid, error_kind=f"unexpected:{type(exc).__name__}")
+        # 안 잡으면 빈 500이 나간다. 유저는 설명을 못 받고, 로그에도 안 남아
+        # 무슨 일이 있었는지 영원히 모른다. 조용한 실패 금지.
+        events.log_event("error", anon_id, error_kind=f"unexpected:{type(exc).__name__}")
         response.status_code = 500
         return {"error": "알 수 없는 오류가 발생했습니다."}
 
     s = record.summary
     events.log_event(
-        "result",
-        sid,
+        "result_shown",
+        anon_id,
         job_chars=record.job_chars,
         resume_chars=record.resume_chars,
         model=s.model,
@@ -221,9 +207,10 @@ def analyze_endpoint(body: AnalyzeRequest, request: Request, response: Response)
         demoted_count=s.demoted_count,
         evidence_found=s.evidence_found,
         partial_quote_warnings=sum(1 for w in record.warnings if "부분 인용" in w),
+        top_gap_count=len(record.top_gap_ids),
         latency_s=s.latency_s,
         cost_usd=s.cost_usd,
     )
 
-    # save_run()을 부르지 않는다. 유저 이력서를 서버에 파일로 쌓지 않는다.
+    # save_run()을 부르지 않는다. 유저 문서를 서버에 파일로 쌓지 않는다.
     return to_response(record)

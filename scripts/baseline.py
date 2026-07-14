@@ -111,6 +111,10 @@ def run_once(client: OpenAI, model: str, job_text: str, resume_text: str) -> dic
     )
 
     status_by_id = {e.requirement_id: e.status for e in analysis.evidences}
+    # quote/reason도 저장한다. status 뒤집힘을 조사하려면 "무엇을 근거로 들었나"가 필요하다.
+    # 검증 후(analysis) 기준 — 강등된 가짜 quote는 이미 None이다.
+    quote_by_id = {e.requirement_id: e.quote for e in analysis.evidences}
+    reason_by_id = {e.requirement_id: e.reason for e in analysis.evidences}
 
     return {
         "requirements": n,
@@ -137,6 +141,8 @@ def run_once(client: OpenAI, model: str, job_text: str, resume_text: str) -> dic
                 "category": r.category,
                 "kind": r.kind,
                 "status": status_by_id.get(r.id, "?"),
+                "quote": quote_by_id.get(r.id),
+                "reason": reason_by_id.get(r.id, ""),
                 "in_top3": any(t.id == r.id for t in top),
             }
             for r in reqs.requirements

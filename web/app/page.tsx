@@ -336,7 +336,8 @@ export default function Page() {
           <div className="report">
             <div className="report-title">개발자에게 제보하기</div>
             <p className="report-desc">
-              결과가 실제와 다르면 알려주세요. 다음 버전 개선에 사용됩니다.
+              결과가 실제와 다르거나 아쉬운 점이 있으면 알려주세요. 혼자 만드는 도구라
+              제보 하나하나가 다음 버전을 정합니다. 직접 읽습니다.
             </p>
             {feedbackSent ? (
               <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>

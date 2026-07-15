@@ -166,19 +166,17 @@ export default function Page() {
       <h1>공고가 요구하는데, 내 문서에 없는 것</h1>
       <p className="lede">
         채용 공고와 <strong>이력서 또는 포트폴리오</strong>를 붙여넣으면,{" "}
-        <strong>근거가 없는 항목 Top 3</strong>을 찾아줍니다.
-      </p>
-      <p className="lede">
-        문장을 대신 써주거나 점수를 매기지 않습니다. <strong>무엇이 비어 있는지</strong>만
-        보여줍니다 — 당신이 문서를 보고 5초 만에 맞는지 틀린지 확인할 수 있도록.
-      </p>
-      <p className="lede">
-        입력한 문서는 저장하지 않습니다. (측정용 메타데이터만 기록)
+        <strong>근거가 없는 항목 Top 3</strong>을 원문 인용과 함께 찾아줍니다.
       </p>
 
       <button type="button" className="sample" onClick={loadSample} disabled={sampleLoading || loading}>
         {sampleLoading ? "샘플 불러오는 중…" : "샘플로 체험하기 — 가상의 공고·이력서로 먼저 보기"}
       </button>
+
+      <p className="hero-note">
+        점수를 매기거나 문장을 대신 써주지 않습니다 — <strong>무엇이 비어 있는지</strong>만
+        보여줍니다. 입력한 문서는 저장하지 않습니다.
+      </p>
 
       <form onSubmit={submit}>
         <div>
@@ -209,6 +207,14 @@ export default function Page() {
             onChange={(e) => setResume(e.target.value)}
             placeholder="이력서 또는 포트폴리오를 붙여넣으세요. 저장하지 않습니다."
           />
+          {/* PDF 업로드 기능은 만들지 않는다. 품질 숫자(Top3 7/8)는 깨끗한 텍스트로 잰 값이고,
+              표 기반 한국 이력서 PDF는 추출 시 텍스트가 뒤섞여 새 실패 표면이 된다 — 홍보 전날
+              열 위험이 아니다. 대신 이 힌트로 붙여넣기 마찰의 절반을 없애고, page_view→submit
+              전환율로 입력 마찰 가설을 검증한다. 전환이 처참하면 그때 pdf.js 클라이언트 추출
+              (서버 무변경, 추출 텍스트를 유저가 보고 고친 뒤 제출)로 D5+에 간다. */}
+          <p className="hint">
+            PDF 이력서는 열어서 전체 선택(Ctrl+A) → 복사 → 붙여넣기 하시면 됩니다.
+          </p>
         </div>
 
         <button type="submit" disabled={!canSubmit}>
@@ -318,26 +324,39 @@ export default function Page() {
             {m.latency_s.toFixed(1)}초 · {m.model}
           </div>
 
-          {/* 순수 로그다. 파이프라인·집계 어디에도 안 들어간다. */}
-          {feedbackSent ? (
-            <p className="feedback-done">기록했습니다. 감사합니다.</p>
-          ) : (
-            <form className="feedback" onSubmit={sendFeedback}>
-              <label htmlFor="feedback">결과가 이상한가요? 한 줄로 알려주세요.</label>
-              <div className="feedback-row">
-                <input
-                  id="feedback"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  maxLength={500}
-                  placeholder="예: 이력서에 있는 항목인데 없다고 나왔어요"
-                />
-                <button type="submit" disabled={!feedback.trim()}>
-                  보내기
-                </button>
-              </div>
-            </form>
-          )}
+          {/* 캡처가 곧 광고가 되도록 결과 하단에 서비스명+URL을 박는다. 표시 전용. */}
+          <div className="brandline">
+            <b>지원 문서 갭 분석기</b>
+            <span>jd-gap-zweadfxs-projects.vercel.app</span>
+          </div>
+
+          {/* 제보 = 순수 로그. 파이프라인·집계 어디에도 안 들어간다. 챗봇이 아니라
+              "개발자에게 남기는 메모"라는 기대를 문구로 못박는다 — 입력하고 아무 답이
+              없어도 고장으로 오독되지 않게. 구분선 아래 보조 톤으로 내려 부록임을 보인다. */}
+          <div className="report">
+            <div className="report-title">개발자에게 제보하기</div>
+            <p className="report-desc">
+              결과가 실제와 다르면 알려주세요. 다음 버전 개선에 사용됩니다.
+            </p>
+            {feedbackSent ? (
+              <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>
+            ) : (
+              <form className="feedback" onSubmit={sendFeedback}>
+                <div className="feedback-row">
+                  <input
+                    id="feedback"
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    maxLength={500}
+                    placeholder="예: 이력서에 있는 항목인데 없다고 나왔어요"
+                  />
+                  <button type="submit" disabled={!feedback.trim()}>
+                    제보
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 

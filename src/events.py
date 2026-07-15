@@ -28,7 +28,12 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-EventName = Literal["page_view", "submit", "result_shown", "error"]
+# feedback은 퍼널 4종(page_view→submit→result_shown/error)과 별개의 순수 로그다.
+# 파이프라인에 들어가지 않고, 집계에도 안 쓴다. "결과가 이상한가요?" 한 줄의 보관소.
+EventName = Literal["page_view", "submit", "result_shown", "error", "feedback"]
+
+# 피드백 자유 입력의 상한. 이력서를 통째로 붙여넣는 사고를 길이로 차단한다.
+MAX_FEEDBACK_CHARS = 500
 
 # 배포 시 반드시 영구 볼륨을 마운트하고 여기를 그 경로로 지정할 것.
 # 안 하면 재배포마다 퍼널이 초기화되어 "N명이 썼다"를 증명할 수 없게 된다.
@@ -57,6 +62,7 @@ def log_event(
     latency_s: float | None = None,
     cost_usd: float | None = None,
     error_kind: str | None = None,
+    feedback_text: str | None = None,
 ) -> None:
     """이벤트 한 줄을 append 한다.
 
@@ -80,6 +86,9 @@ def log_event(
         "latency_s": round(latency_s, 2) if latency_s is not None else None,
         "cost_usd": round(cost_usd, 5) if cost_usd is not None else None,
         "error_kind": error_kind,
+        # 유일하게 허용되는 자유 텍스트. 유저가 자발적으로 쓴 피드백 한 줄이지
+        # 공고/지원 문서가 아니다. 그래도 상한으로 자른다 — 전문 붙여넣기 사고 방지.
+        "feedback_text": feedback_text[:MAX_FEEDBACK_CHARS] if feedback_text else None,
     }
     row = {k: v for k, v in row.items() if v is not None}
 

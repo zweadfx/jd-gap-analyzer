@@ -17,6 +17,7 @@ Vercel과 Railway는 다른 도메인이라 쿠키가 서드파티가 되어 브
 import os
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, Request, Response
@@ -61,6 +62,15 @@ _hits: dict[str, deque[float]] = defaultdict(deque)
 class AnalyzeRequest(BaseModel):
     job: str = Field(description="채용 공고 원문")
     resume: str = Field(description="지원 문서(이력서 또는 포트폴리오) 원문")
+
+
+class FeedbackRequest(BaseModel):
+    text: str = Field(description="결과 화면의 피드백 한 줄. 파이프라인에 들어가지 않는 순수 로그")
+
+
+# 샘플 체험용. data/samples/는 커밋된 가상 데이터라 배포 이미지에 항상 있다.
+# 프론트에 사본을 두지 않는다 — 원본이 둘이 되면 언젠가 어긋난다.
+_SAMPLES_DIR = Path(__file__).resolve().parent.parent / "data" / "samples"
 
 
 def client_ip(request: Request) -> str:
@@ -147,6 +157,24 @@ def track_page_view(x_anon_id: str = Header(default="")) -> dict:
     """랜딩 도착. 재방문은 로그에서 유도한다(같은 anon_id의 page_view가 다른 날에 있으면)."""
     events.log_event("page_view", x_anon_id or events.new_anon_id())
     return {"ok": True}
+
+
+@app.post("/events/feedback")
+def track_feedback(body: FeedbackRequest, x_anon_id: str = Header(default="")) -> dict:
+    """결과 화면의 '결과가 이상한가요?' 한 줄. 저장만 하고 아무 데도 쓰지 않는다."""
+    text = body.text.strip()
+    if text:
+        events.log_event("feedback", x_anon_id or events.new_anon_id(), feedback_text=text)
+    return {"ok": True}
+
+
+@app.get("/sample")
+def sample() -> dict:
+    """샘플 체험 버튼용. 낯선 사이트에 자기 이력서를 바로 붙여넣는 사람은 없다."""
+    return {
+        "job": (_SAMPLES_DIR / "job1.txt").read_text(encoding="utf-8"),
+        "resume": (_SAMPLES_DIR / "resume.txt").read_text(encoding="utf-8"),
+    }
 
 
 @app.post("/analyze")

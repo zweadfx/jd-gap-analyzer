@@ -70,6 +70,9 @@ export default function Page() {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,6 +102,35 @@ export default function Page() {
   const jobOver = job.length > MAX_JOB;
   const resumeOver = resume.length > MAX_RESUME;
   const canSubmit = job.trim() && resume.trim() && !jobOver && !resumeOver && !loading;
+
+  // 낯선 사이트에 자기 이력서를 바로 붙여넣는 사람은 없다. 가상 샘플로 먼저 보여준다.
+  // 샘플 원본은 서버(data/samples/)에 있다. 프론트에 사본을 두면 언젠가 어긋난다.
+  async function loadSample() {
+    setSampleLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/sample`);
+      const data = await res.json();
+      setJob(data.job);
+      setResume(data.resume);
+    } catch {
+      setError("샘플을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setSampleLoading(false);
+    }
+  }
+
+  async function sendFeedback(e: React.FormEvent) {
+    e.preventDefault();
+    const text = feedback.trim();
+    if (!text) return;
+    setFeedbackSent(true); // 실패해도 재전송 UI를 주지 않는다. 순수 로그다.
+    fetch(`${API}/events/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
+      body: JSON.stringify({ text }),
+    }).catch(() => {});
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -140,6 +172,13 @@ export default function Page() {
         문장을 대신 써주거나 점수를 매기지 않습니다. <strong>무엇이 비어 있는지</strong>만
         보여줍니다 — 당신이 문서를 보고 5초 만에 맞는지 틀린지 확인할 수 있도록.
       </p>
+      <p className="lede">
+        입력한 문서는 저장하지 않습니다. (측정용 메타데이터만 기록)
+      </p>
+
+      <button type="button" className="sample" onClick={loadSample} disabled={sampleLoading || loading}>
+        {sampleLoading ? "샘플 불러오는 중…" : "샘플로 체험하기 — 가상의 공고·이력서로 먼저 보기"}
+      </button>
 
       <form onSubmit={submit}>
         <div>
@@ -278,6 +317,27 @@ export default function Page() {
             <br />
             {m.latency_s.toFixed(1)}초 · {m.model}
           </div>
+
+          {/* 순수 로그다. 파이프라인·집계 어디에도 안 들어간다. */}
+          {feedbackSent ? (
+            <p className="feedback-done">기록했습니다. 감사합니다.</p>
+          ) : (
+            <form className="feedback" onSubmit={sendFeedback}>
+              <label htmlFor="feedback">결과가 이상한가요? 한 줄로 알려주세요.</label>
+              <div className="feedback-row">
+                <input
+                  id="feedback"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  maxLength={500}
+                  placeholder="예: 이력서에 있는 항목인데 없다고 나왔어요"
+                />
+                <button type="submit" disabled={!feedback.trim()}>
+                  보내기
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 

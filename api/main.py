@@ -54,9 +54,15 @@ app.add_middleware(
 # 인메모리다. 프로세스가 재시작되면 초기화되고, 인스턴스가 여러 개면 각자 센다.
 # 5일 프로젝트에 Redis를 붙이지 않는다. 다만 이 한계를 알고 있어야 한다 —
 # 비용 하드캡은 이것이 아니라 OpenAI 선불 크레딧 + 자동충전 OFF다.
-RATE_LIMIT = int(os.getenv("RATE_LIMIT_PER_DAY", "5"))
+# IP당 20회/일. 개발 중엔 5였지만, 학교·회사·카페는 여러 명이 같은 IP를 쓰므로
+# 홍보 첫날 정상 유저가 차단된다. 그래서 IP 한도는 넉넉히 올리고,
+# 대신 전역 일일 상한으로 예산 폭주를 구조적으로 막는다.
+RATE_LIMIT = int(os.getenv("RATE_LIMIT_PER_DAY", "20"))
+# 전역 500회/일 → 실행당 ~$0.0032 기준 하루 최대 ~$1.6. 하드 캡.
+GLOBAL_DAILY_LIMIT = int(os.getenv("GLOBAL_DAILY_LIMIT", "500"))
 RATE_WINDOW_S = 24 * 3600
 _hits: dict[str, deque[float]] = defaultdict(deque)
+_global_hits: deque[float] = deque()
 
 
 class AnalyzeRequest(BaseModel):
@@ -81,15 +87,28 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def rate_limited(ip: str) -> bool:
-    now = time.time()
-    hits = _hits[ip]
+def _prune(hits: deque[float], now: float) -> None:
     while hits and now - hits[0] > RATE_WINDOW_S:
         hits.popleft()
+
+
+def check_and_consume(ip: str) -> str | None:
+    """한도를 확인하고, 통과하면 카운트를 소비한다.
+
+    반환: 통과면 None, 전역 상한이면 "global", IP 상한이면 "ip".
+    거절되는 요청은 카운트를 소비하지 않는다(전역·IP 순으로 검사).
+    """
+    now = time.time()
+    _prune(_global_hits, now)
+    if len(_global_hits) >= GLOBAL_DAILY_LIMIT:
+        return "global"
+    hits = _hits[ip]
+    _prune(hits, now)
     if len(hits) >= RATE_LIMIT:
-        return True
+        return "ip"
+    _global_hits.append(now)
     hits.append(now)
-    return False
+    return None
 
 
 def to_response(record: RunRecord) -> dict:
@@ -205,7 +224,13 @@ def analyze_endpoint(
 
     events.log_event("submit", anon_id, job_chars=len(body.job), resume_chars=len(body.resume))
 
-    if rate_limited(ip):
+    limit = check_and_consume(ip)
+    if limit == "global":
+        # 전역 상한 도달 = 예산 소진. error 이벤트가 디스코드 알림도 발사한다(웹훅 재사용).
+        events.log_event("error", anon_id, error_kind="global_limit")
+        response.status_code = 429
+        return {"error": "오늘 분석 한도가 소진됐습니다. 내일 다시 와주세요."}
+    if limit == "ip":
         events.log_event("error", anon_id, error_kind="rate_limited")
         response.status_code = 429
         return {"error": f"하루 {RATE_LIMIT}회까지 사용할 수 있습니다. 내일 다시 시도해주세요."}

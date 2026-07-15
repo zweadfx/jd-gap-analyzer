@@ -1,0 +1,319 @@
+{
+  "timestamp": "20260714_153100",
+  "summary": {
+    "model": "gpt-5.4-nano",
+    "temperature": 0.0,
+    "prompt_hash": "72be9be37431",
+    "requirements_count": 11,
+    "quotes_offered": 4,
+    "demoted_count": 0,
+    "evidence_found": 4,
+    "latency_s": 13.189325382991228,
+    "tokens_in": 4564,
+    "tokens_out": 1484,
+    "cost_usd": 0.0027678,
+    "hallucination_rate": 0.0,
+    "evidence_rate": 0.36363636363636365
+  },
+  "model": "gpt-5.4-nano",
+  "job_path": "data/samples/job1.txt",
+  "resume_path": "data/samples/resume.txt",
+  "job_chars": 598,
+  "resume_chars": 839,
+  "prompts": {
+    "step1": "[채용 공고 원문]\n[샘플 — 가상 공고] 핀테크A / LLM 플랫폼 백엔드 엔지니어\n\n■ 팀 소개\n사내 모든 프로덕트가 사용하는 LLM 게이트웨이와 에이전트 런타임을 만듭니다.\n하루 수천만 건의 LLM 호출이 이 팀의 인프라를 지나갑니다.\n\n■ 이런 일을 합니다\n- LLM 게이트웨이 API 설계 및 운영\n- 에이전트 실행 런타임 개발\n- 모델 응답 품질 모니터링 파이프라인 구축\n\n■ 자격요건\n- Python 백엔드 개발 경험 3년 이상\n- FastAPI 또는 그에 준하는 비동기 웹 프레임워크 사용 경험\n- LLM 기반 서비스를 실제 프로덕션에 배포하고 운영한 경험\n- Kubernetes 환경에서 서비스를 배포하고 운영한 경험\n- 대용량 트래픽(일 100만 요청 이상)을 처리하는 시스템을 다뤄본 경험\n- 관측 가능성(로깅, 메트릭, 트레이싱) 도구를 직접 구축하거나 운영한 경험\n\n■ 우대사항\n- vLLM, TGI 등 추론 서버를 직접 운영해본 경험\n- RAG 파이프라인을 설계하고 성능을 개선해본 경험\n- 금융 도메인 서비스 개발 경험\n- 오픈소스 기여 경험\n- 주니어 엔지니어를 멘토링하거나 기술 문서를 작성해본 경험\n\n■ 채용 절차\n서류 → 과제 → 기술 면접 → 문화 면접",
+    "step2": "[요구사항 체크리스트]\n[\n  {\n    \"id\": \"r1\",\n    \"text\": \"Python 백엔드 개발 경험 3년 이상\",\n    \"category\": \"필수\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r2\",\n    \"text\": \"FastAPI 또는 그에 준하는 비동기 웹 프레임워크 사용 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"기술\"\n  },\n  {\n    \"id\": \"r3\",\n    \"text\": \"LLM 기반 서비스를 실제 프로덕션에 배포하고 운영한 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r4\",\n    \"text\": \"Kubernetes 환경에서 서비스를 배포하고 운영한 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"기술\"\n  },\n  {\n    \"id\": \"r5\",\n    \"text\": \"대용량 트래픽(일 100만 요청 이상)을 처리하는 시스템을 다뤄본 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r6\",\n    \"text\": \"관측 가능성(로깅, 메트릭, 트레이싱) 도구를 직접 구축하거나 운영한 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"기술\"\n  },\n  {\n    \"id\": \"r7\",\n    \"text\": \"vLLM, TGI 등 추론 서버를 직접 운영해본 경험\",\n    \"category\": \"우대\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r8\",\n    \"text\": \"RAG 파프라인을 설계하고 성능을 개선해본 경험\",\n    \"category\": \"우대\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r9\",\n    \"text\": \"금융 도메인 서비스 개발 경험\",\n    \"category\": \"우대\",\n    \"kind\": \"도메인\"\n  },\n  {\n    \"id\": \"r10\",\n    \"text\": \"오픈소스 기여 경험\",\n    \"category\": \"우대\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r11\",\n    \"text\": \"주니어 엔지니어를 멘토링하거나 기술 문서를 작성해본 경험\",\n    \"category\": \"우대\",\n    \"kind\": \"소프트스킬\"\n  }\n]\n\n[지원 문서 원문]\n홍길동 (샘플 — 가상 인물)\n백엔드 / AI 애플리케이션 개발자\nhong@example.com | github.com/example\n\n■ 요약\n백엔드 API 개발과 LLM 애플리케이션 프로토타이핑 경험이 있는 개발자입니다.\nPython 기반 서비스 개발을 주로 해왔고, 최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.\n\n■ 경력\n\n[가상컴퍼니] AI 프로덕트 팀 / 백엔드 엔지니어 (2024.03 ~ 현재)\n- FastAPI로 4개 에이전트 API를 구현하고 사내 도구에 연동했습니다.\n- OpenAI API를 사용해 문서 요약 기능을 만들었고, 프롬프트를 반복 튜닝해 사용자 만족도를 개선했습니다.\n- Pydantic으로 LLM 구조화 출력을 정의하고, 파싱 실패 시 재시도하는 로직을 작성했습니다.\n- PostgreSQL 스키마를 설계하고 SQLAlchemy로 ORM 레이어를 작성했습니다.\n- Ruff와 pre-commit을 도입해 팀의 코드 스타일 논쟁을 없앴습니다.\n- 주니어 개발자 1명의 온보딩을 맡아 3개월간 코드 리뷰를 진행했습니다.\n\n[개인 프로젝트] 채용 공고 갭 분석기 (2026.07 ~)\n- 채용 공고와 이력서를 비교해 근거 없는 요구사항을 찾아주는 CLI를 만들고 있습니다.\n- LLM이 인용문을 지어내는 문제를 원문 대조 검증으로 잡았습니다.\n\n■ 기술\n- 언어: Python, JavaScript, SQL\n- 프레임워크: FastAPI, Flask, SQLAlchemy\n- 도구: Git, Docker, Ruff, pytest\n- LLM: OpenAI API, 프롬프트 엔지니어링, 구조화 출력(Pydantic)\n\n■ 학력\n소프트웨어학과 학사 (2024 졸업)",
+    "step3": "[포지션 요약]\nLLM 게이트웨이와 에이전트 런타임을 백엔드로 개발·운영하는 포지션입니다. LLM 기반 서비스를 프로덕션 환경에서 안정적으로 배포하고 성능/관측성을 개선하는 역할입니다.\n\n[근거가 없는 요구사항 (Top 3)]\n[\n  {\n    \"id\": \"r4\",\n    \"text\": \"Kubernetes 환경에서 서비스를 배포하고 운영한 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"기술\"\n  },\n  {\n    \"id\": \"r5\",\n    \"text\": \"대용량 트래픽(일 100만 요청 이상)을 처리하는 시스템을 다뤄본 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"경험\"\n  },\n  {\n    \"id\": \"r6\",\n    \"text\": \"관측 가능성(로깅, 메트릭, 트레이싱) 도구를 직접 구축하거나 운영한 경험\",\n    \"category\": \"필수\",\n    \"kind\": \"기술\"\n  }\n]\n\n[지원자의 현재 지원 문서]\n홍길동 (샘플 — 가상 인물)\n백엔드 / AI 애플리케이션 개발자\nhong@example.com | github.com/example\n\n■ 요약\n백엔드 API 개발과 LLM 애플리케이션 프로토타이핑 경험이 있는 개발자입니다.\nPython 기반 서비스 개발을 주로 해왔고, 최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.\n\n■ 경력\n\n[가상컴퍼니] AI 프로덕트 팀 / 백엔드 엔지니어 (2024.03 ~ 현재)\n- FastAPI로 4개 에이전트 API를 구현하고 사내 도구에 연동했습니다.\n- OpenAI API를 사용해 문서 요약 기능을 만들었고, 프롬프트를 반복 튜닝해 사용자 만족도를 개선했습니다.\n- Pydantic으로 LLM 구조화 출력을 정의하고, 파싱 실패 시 재시도하는 로직을 작성했습니다.\n- PostgreSQL 스키마를 설계하고 SQLAlchemy로 ORM 레이어를 작성했습니다.\n- Ruff와 pre-commit을 도입해 팀의 코드 스타일 논쟁을 없앴습니다.\n- 주니어 개발자 1명의 온보딩을 맡아 3개월간 코드 리뷰를 진행했습니다.\n\n[개인 프로젝트] 채용 공고 갭 분석기 (2026.07 ~)\n- 채용 공고와 이력서를 비교해 근거 없는 요구사항을 찾아주는 CLI를 만들고 있습니다.\n- LLM이 인용문을 지어내는 문제를 원문 대조 검증으로 잡았습니다.\n\n■ 기술\n- 언어: Python, JavaScript, SQL\n- 프레임워크: FastAPI, Flask, SQLAlchemy\n- 도구: Git, Docker, Ruff, pytest\n- LLM: OpenAI API, 프롬프트 엔지니어링, 구조화 출력(Pydantic)\n\n■ 학력\n소프트웨어학과 학사 (2024 졸업)"
+  },
+  "raw_responses": {
+    "step1": "{\"role_summary\":\"LLM 게이트웨이와 에이전트 런타임을 백엔드로 개발·운영하는 포지션입니다. LLM 기반 서비스를 프로덕션 환경에서 안정적으로 배포하고 성능/관측성을 개선하는 역할입니다.\",\"requirements\":[{\"id\":\"r1\",\"text\":\"Python 백엔드 개발 경험 3년 이상\",\"category\":\"필수\",\"kind\":\"경험\"},{\"id\":\"r2\",\"text\":\"FastAPI 또는 그에 준하는 비동기 웹 프레임워크 사용 경험\",\"category\":\"필수\",\"kind\":\"기술\"},{\"id\":\"r3\",\"text\":\"LLM 기반 서비스를 실제 프로덕션에 배포하고 운영한 경험\",\"category\":\"필수\",\"kind\":\"경험\"},{\"id\":\"r4\",\"text\":\"Kubernetes 환경에서 서비스를 배포하고 운영한 경험\",\"category\":\"필수\",\"kind\":\"기술\"},{\"id\":\"r5\",\"text\":\"대용량 트래픽(일 100만 요청 이상)을 처리하는 시스템을 다뤄본 경험\",\"category\":\"필수\",\"kind\":\"경험\"},{\"id\":\"r6\",\"text\":\"관측 가능성(로깅, 메트릭, 트레이싱) 도구를 직접 구축하거나 운영한 경험\",\"category\":\"필수\",\"kind\":\"기술\"},{\"id\":\"r7\",\"text\":\"vLLM, TGI 등 추론 서버를 직접 운영해본 경험\",\"category\":\"우대\",\"kind\":\"경험\"},{\"id\":\"r8\",\"text\":\"RAG 파프라인을 설계하고 성능을 개선해본 경험\",\"category\":\"우대\",\"kind\":\"경험\"},{\"id\":\"r9\",\"text\":\"금융 도메인 서비스 개발 경험\",\"category\":\"우대\",\"kind\":\"도메인\"},{\"id\":\"r10\",\"text\":\"오픈소스 기여 경험\",\"category\":\"우대\",\"kind\":\"경험\"},{\"id\":\"r11\",\"text\":\"주니어 엔지니어를 멘토링하거나 기술 문서를 작성해본 경험\",\"category\":\"우대\",\"kind\":\"소프트스킬\"}]}",
+    "step2": "{\"evidences\":[{\"requirement_id\":\"r1\",\"status\":\"약함\",\"quote\":\"Python 기반 서비스 개발을 주로 해왔고, 최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.\",\"reason\":\"지원 문서에 Python 기반 개발 경험은 있으나, 3년 이상 여부(기간)가 명시되어 있지 않습니다.\"},{\"requirement_id\":\"r2\",\"status\":\"충분\",\"quote\":\"FastAPI로 4개 에이전트 API를 구현하고 사내 도구에 연동했습니다.\",\"reason\":\"FastAPI 사용 경험이 경력 항목에 직접 언급되어 있습니다.\"},{\"requirement_id\":\"r3\",\"status\":\"약함\",\"quote\":\"최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.\",\"reason\":\"LLM을 붙인 내부 도구 제작 경험은 있으나, '실제 프로덕션에 배포하고 운영'했다는 운영/배포 표현이 직접적으로 확인되지는 않습니다.\"},{\"requirement_id\":\"r4\",\"status\":\"없음\",\"quote\":null,\"reason\":\"Kubernetes 환경 배포/운영 관련 문장이 지원 문서에 없습니다.\"},{\"requirement_id\":\"r5\",\"status\":\"없음\",\"quote\":null,\"reason\":\"일 100만 요청 이상 등 대용량 트래픽 처리 경험이 언급되지 않았습니다.\"},{\"requirement_id\":\"r6\",\"status\":\"없음\",\"quote\":null,\"reason\":\"로깅/메트릭/트레이싱 등 관측 가능성 도구를 구축하거나 운영한 경험이 지원 문서에 없습니다.\"},{\"requirement_id\":\"r7\",\"status\":\"없음\",\"quote\":null,\"reason\":\"vLLM, TGI 등 추론 서버를 직접 운영한 경험이 언급되지 않았습니다.\"},{\"requirement_id\":\"r8\",\"status\":\"없음\",\"quote\":null,\"reason\":\"RAG 파이프라인 설계 및 성능 개선 경험이 지원 문서에 없습니다.\"},{\"requirement_id\":\"r9\",\"status\":\"없음\",\"quote\":null,\"reason\":\"금융 도메인 서비스 개발 경험이 지원 문서에 없습니다.\"},{\"requirement_id\":\"r10\",\"status\":\"없음\",\"quote\":null,\"reason\":\"오픈소스 기여 경험이 지원 문서에 없습니다.\"},{\"requirement_id\":\"r11\",\"status\":\"충분\",\"quote\":\"주니어 개발자 1명의 온보딩을 맡아 3개월간 코드 리뷰를 진행했습니다.\",\"reason\":\"주니어 개발자 온보딩 및 코드 리뷰를 진행한 경험이 직접 기재되어 있습니다.\"}]}",
+    "step3": "{\"suggestions\":[{\"requirement_id\":\"r4\",\"bullets\":[\"기존 FastAPI 기반 에이전트 API(4개)를 대상으로 Dockerfile 작성 후, k8s(예: Deployment/Service/Ingress) 매니페스트를 직접 구성해 롤링 업데이트와 readiness/liveness probe를 설정해 보세요.\",\"로컬 k8s 환경(minikube/kind)에서 부하를 걸어(HPA 포함) Pod 수가 스케일링되는지, 그리고 장애 상황(컨테이너 kill)에서 재시작/헬스체크가 정상 동작하는지 로그·이벤트로 캡처해 정리하세요.\"]},{\"requirement_id\":\"r5\",\"bullets\":[\"현재 구현한 LLM API 중 1개(예: 문서 요약)를 선택해, 요청 크기/응답 길이/동시성 시나리오를 나눠 부하 테스트를 설계하고(예: k6/Locust) p95 latency, 에러율, 타임아웃 비율을 측정해 목표치를 정해 보세요.\",\"LLM 호출 병목을 줄이기 위해 큐잉/동시성 제한(예: asyncio semaphore, 작업 큐) 또는 캐싱(프롬프트/결과 캐시)을 적용한 뒤, 동일 부하 조건에서 처리량(req/s)과 비용(호출 횟수/토큰)을 비교하는 실험 결과를 남겨 보세요.\"]},{\"requirement_id\":\"r6\",\"bullets\":[\"FastAPI 애플리케이션에 구조화 로깅(요청ID/세션ID/프롬프트 해시/에러코드 포함)과 메트릭(예: 요청 수, p95 latency, LLM 호출 시간, 파싱 실패율)을 추가하고, Prometheus+Grafana 대시보드를 최소 1개 구성해 보세요.\",\"분산 트레이싱을 위해 OpenTelemetry로 LLM 호출 구간(외부 API 호출, 재시도, 파싱)을 span으로 나누고, 트레이스에서 병목이 보이는지 확인한 뒤 샘플 트레이스 캡처(또는 JSON export)를 포트폴리오로 정리해 보세요.\"]}]}"
+  },
+  "requirements": {
+    "role_summary": "LLM 게이트웨이와 에이전트 런타임을 백엔드로 개발·운영하는 포지션입니다. LLM 기반 서비스를 프로덕션 환경에서 안정적으로 배포하고 성능/관측성을 개선하는 역할입니다.",
+    "requirements": [
+      {
+        "id": "r1",
+        "text": "Python 백엔드 개발 경험 3년 이상",
+        "category": "필수",
+        "kind": "경험"
+      },
+      {
+        "id": "r2",
+        "text": "FastAPI 또는 그에 준하는 비동기 웹 프레임워크 사용 경험",
+        "category": "필수",
+        "kind": "기술"
+      },
+      {
+        "id": "r3",
+        "text": "LLM 기반 서비스를 실제 프로덕션에 배포하고 운영한 경험",
+        "category": "필수",
+        "kind": "경험"
+      },
+      {
+        "id": "r4",
+        "text": "Kubernetes 환경에서 서비스를 배포하고 운영한 경험",
+        "category": "필수",
+        "kind": "기술"
+      },
+      {
+        "id": "r5",
+        "text": "대용량 트래픽(일 100만 요청 이상)을 처리하는 시스템을 다뤄본 경험",
+        "category": "필수",
+        "kind": "경험"
+      },
+      {
+        "id": "r6",
+        "text": "관측 가능성(로깅, 메트릭, 트레이싱) 도구를 직접 구축하거나 운영한 경험",
+        "category": "필수",
+        "kind": "기술"
+      },
+      {
+        "id": "r7",
+        "text": "vLLM, TGI 등 추론 서버를 직접 운영해본 경험",
+        "category": "우대",
+        "kind": "경험"
+      },
+      {
+        "id": "r8",
+        "text": "RAG 파프라인을 설계하고 성능을 개선해본 경험",
+        "category": "우대",
+        "kind": "경험"
+      },
+      {
+        "id": "r9",
+        "text": "금융 도메인 서비스 개발 경험",
+        "category": "우대",
+        "kind": "도메인"
+      },
+      {
+        "id": "r10",
+        "text": "오픈소스 기여 경험",
+        "category": "우대",
+        "kind": "경험"
+      },
+      {
+        "id": "r11",
+        "text": "주니어 엔지니어를 멘토링하거나 기술 문서를 작성해본 경험",
+        "category": "우대",
+        "kind": "소프트스킬"
+      }
+    ]
+  },
+  "analysis": {
+    "evidences": [
+      {
+        "requirement_id": "r1",
+        "status": "약함",
+        "quote": "Python 기반 서비스 개발을 주로 해왔고, 최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.",
+        "reason": "지원 문서에 Python 기반 개발 경험은 있으나, 3년 이상 여부(기간)가 명시되어 있지 않습니다."
+      },
+      {
+        "requirement_id": "r2",
+        "status": "충분",
+        "quote": "FastAPI로 4개 에이전트 API를 구현하고 사내 도구에 연동했습니다.",
+        "reason": "FastAPI 사용 경험이 경력 항목에 직접 언급되어 있습니다."
+      },
+      {
+        "requirement_id": "r3",
+        "status": "약함",
+        "quote": "최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.",
+        "reason": "LLM을 붙인 내부 도구 제작 경험은 있으나, '실제 프로덕션에 배포하고 운영'했다는 운영/배포 표현이 직접적으로 확인되지는 않습니다."
+      },
+      {
+        "requirement_id": "r4",
+        "status": "없음",
+        "quote": null,
+        "reason": "Kubernetes 환경 배포/운영 관련 문장이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r5",
+        "status": "없음",
+        "quote": null,
+        "reason": "일 100만 요청 이상 등 대용량 트래픽 처리 경험이 언급되지 않았습니다."
+      },
+      {
+        "requirement_id": "r6",
+        "status": "없음",
+        "quote": null,
+        "reason": "로깅/메트릭/트레이싱 등 관측 가능성 도구를 구축하거나 운영한 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r7",
+        "status": "없음",
+        "quote": null,
+        "reason": "vLLM, TGI 등 추론 서버를 직접 운영한 경험이 언급되지 않았습니다."
+      },
+      {
+        "requirement_id": "r8",
+        "status": "없음",
+        "quote": null,
+        "reason": "RAG 파이프라인 설계 및 성능 개선 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r9",
+        "status": "없음",
+        "quote": null,
+        "reason": "금융 도메인 서비스 개발 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r10",
+        "status": "없음",
+        "quote": null,
+        "reason": "오픈소스 기여 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r11",
+        "status": "충분",
+        "quote": "주니어 개발자 1명의 온보딩을 맡아 3개월간 코드 리뷰를 진행했습니다.",
+        "reason": "주니어 개발자 온보딩 및 코드 리뷰를 진행한 경험이 직접 기재되어 있습니다."
+      }
+    ]
+  },
+  "analysis_before_verify": {
+    "evidences": [
+      {
+        "requirement_id": "r1",
+        "status": "약함",
+        "quote": "Python 기반 서비스 개발을 주로 해왔고, 최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.",
+        "reason": "지원 문서에 Python 기반 개발 경험은 있으나, 3년 이상 여부(기간)가 명시되어 있지 않습니다."
+      },
+      {
+        "requirement_id": "r2",
+        "status": "충분",
+        "quote": "FastAPI로 4개 에이전트 API를 구현하고 사내 도구에 연동했습니다.",
+        "reason": "FastAPI 사용 경험이 경력 항목에 직접 언급되어 있습니다."
+      },
+      {
+        "requirement_id": "r3",
+        "status": "약함",
+        "quote": "최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.",
+        "reason": "LLM을 붙인 내부 도구 제작 경험은 있으나, '실제 프로덕션에 배포하고 운영'했다는 운영/배포 표현이 직접적으로 확인되지는 않습니다."
+      },
+      {
+        "requirement_id": "r4",
+        "status": "없음",
+        "quote": null,
+        "reason": "Kubernetes 환경 배포/운영 관련 문장이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r5",
+        "status": "없음",
+        "quote": null,
+        "reason": "일 100만 요청 이상 등 대용량 트래픽 처리 경험이 언급되지 않았습니다."
+      },
+      {
+        "requirement_id": "r6",
+        "status": "없음",
+        "quote": null,
+        "reason": "로깅/메트릭/트레이싱 등 관측 가능성 도구를 구축하거나 운영한 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r7",
+        "status": "없음",
+        "quote": null,
+        "reason": "vLLM, TGI 등 추론 서버를 직접 운영한 경험이 언급되지 않았습니다."
+      },
+      {
+        "requirement_id": "r8",
+        "status": "없음",
+        "quote": null,
+        "reason": "RAG 파이프라인 설계 및 성능 개선 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r9",
+        "status": "없음",
+        "quote": null,
+        "reason": "금융 도메인 서비스 개발 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r10",
+        "status": "없음",
+        "quote": null,
+        "reason": "오픈소스 기여 경험이 지원 문서에 없습니다."
+      },
+      {
+        "requirement_id": "r11",
+        "status": "충분",
+        "quote": "주니어 개발자 1명의 온보딩을 맡아 3개월간 코드 리뷰를 진행했습니다.",
+        "reason": "주니어 개발자 온보딩 및 코드 리뷰를 진행한 경험이 직접 기재되어 있습니다."
+      }
+    ]
+  },
+  "suggestions": {
+    "suggestions": [
+      {
+        "requirement_id": "r4",
+        "bullets": [
+          "기존 FastAPI 기반 에이전트 API(4개)를 대상으로 Dockerfile 작성 후, k8s(예: Deployment/Service/Ingress) 매니페스트를 직접 구성해 롤링 업데이트와 readiness/liveness probe를 설정해 보세요.",
+          "로컬 k8s 환경(minikube/kind)에서 부하를 걸어(HPA 포함) Pod 수가 스케일링되는지, 그리고 장애 상황(컨테이너 kill)에서 재시작/헬스체크가 정상 동작하는지 로그·이벤트로 캡처해 정리하세요."
+        ]
+      },
+      {
+        "requirement_id": "r5",
+        "bullets": [
+          "현재 구현한 LLM API 중 1개(예: 문서 요약)를 선택해, 요청 크기/응답 길이/동시성 시나리오를 나눠 부하 테스트를 설계하고(예: k6/Locust) p95 latency, 에러율, 타임아웃 비율을 측정해 목표치를 정해 보세요.",
+          "LLM 호출 병목을 줄이기 위해 큐잉/동시성 제한(예: asyncio semaphore, 작업 큐) 또는 캐싱(프롬프트/결과 캐시)을 적용한 뒤, 동일 부하 조건에서 처리량(req/s)과 비용(호출 횟수/토큰)을 비교하는 실험 결과를 남겨 보세요."
+        ]
+      },
+      {
+        "requirement_id": "r6",
+        "bullets": [
+          "FastAPI 애플리케이션에 구조화 로깅(요청ID/세션ID/프롬프트 해시/에러코드 포함)과 메트릭(예: 요청 수, p95 latency, LLM 호출 시간, 파싱 실패율)을 추가하고, Prometheus+Grafana 대시보드를 최소 1개 구성해 보세요.",
+          "분산 트레이싱을 위해 OpenTelemetry로 LLM 호출 구간(외부 API 호출, 재시도, 파싱)을 span으로 나누고, 트레이스에서 병목이 보이는지 확인한 뒤 샘플 트레이스 캡처(또는 JSON export)를 포트폴리오로 정리해 보세요."
+        ]
+      }
+    ]
+  },
+  "top_gap_ids": [
+    "r4",
+    "r5",
+    "r6"
+  ],
+  "ranked_gap_ids": [
+    "r4",
+    "r5",
+    "r6",
+    "r7",
+    "r8",
+    "r10",
+    "r9"
+  ],
+  "hallucination_count": 0,
+  "usages": [
+    {
+      "step": "step1_requirements",
+      "model": "gpt-5.4-nano",
+      "latency_s": 4.24618548998842,
+      "prompt_tokens": 1786,
+      "completion_tokens": 440,
+      "retried": false,
+      "total_tokens": 2226,
+      "cost_usd": 0.0009072
+    },
+    {
+      "step": "step2_evidence",
+      "model": "gpt-5.4-nano",
+      "latency_s": 5.26601343099901,
+      "prompt_tokens": 1708,
+      "completion_tokens": 554,
+      "retried": false,
+      "total_tokens": 2262,
+      "cost_usd": 0.0010341
+    },
+    {
+      "step": "step3_suggestions",
+      "model": "gpt-5.4-nano",
+      "latency_s": 3.6771264620037982,
+      "prompt_tokens": 1070,
+      "completion_tokens": 490,
+      "retried": false,
+      "total_tokens": 1560,
+      "cost_usd": 0.0008265
+    }
+  ],
+  "warnings": [
+    "[r3] 부분 인용 의심: 완결된 문장 1~2개와 일치하지 않음 — \"최근 1년은 LLM을 붙인 내부 도구를 만들었습니다.\". 문장 중간을 잘라내면 의미가 뒤집힐 수 있다 (\"경험은 없습니다\" → \"경험\")."
+  ]
+}

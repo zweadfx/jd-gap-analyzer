@@ -49,6 +49,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Anon-Id"],
 )
 
+# 매일 22:00 KST 일일 요약을 디스코드로 발송. cron 인프라를 새로 만들지 않는다 — 프로세스 내
+# 데몬 스레드다(인메모리 레이트리밋과 같은 수준·같은 '인스턴스 1대' 전제). 모듈 import 시 1회 뜬다.
+# DISCORD_WEBHOOK_URL이 없으면 발송은 내부에서 no-op이라 루프만 돌 뿐 무해하다.
+events.start_daily_digest_scheduler(hour=22, minute=0)
+
 # --- 레이트리밋: IP당 하루 5회 (컨벤션 7장) ---
 #
 # 인메모리다. 프로세스가 재시작되면 초기화되고, 인스턴스가 여러 개면 각자 센다.
@@ -192,6 +197,17 @@ def admin_events(token: str = "", n: int = 50) -> dict:
     return {"path": str(path), "exists": True, "count": len(lines), "lines": lines[-n:]}
 
 
+# 온디맨드 현황 — 호출 즉시 당일 요약을 디스코드로 발송한다(스케줄러의 22:00을 기다리지 않고).
+# /admin/events와 같은 토큰 게이트(없거나 틀리면 404). 발송은 fire-and-forget이라
+# 응답의 summary는 '보낸 숫자'이고, 채널 도착은 눈으로 확인한다.
+@app.get("/admin/digest")
+def admin_digest(token: str = "") -> dict:
+    admin_token = os.getenv("ADMIN_TOKEN", "")
+    if not admin_token or token != admin_token:
+        raise HTTPException(status_code=404)
+    return {"ok": True, "sent": True, "summary": events.send_digest()}
+
+
 @app.post("/events/page_view")
 def track_page_view(x_anon_id: str = Header(default="")) -> dict:
     """랜딩 도착. 재방문은 로그에서 유도한다(같은 anon_id의 page_view가 다른 날에 있으면)."""
@@ -234,11 +250,14 @@ def analyze_endpoint(
         # 전역 상한 도달 = 예산 소진. error 이벤트가 디스코드 알림도 발사한다(웹훅 재사용).
         events.log_event("error", anon_id, error_kind="global_limit")
         response.status_code = 429
-        return {"error": "오늘 분석 한도가 소진됐습니다. 내일 다시 와주세요."}
+        return {"error": "오늘 분석 한도가 소진됐습니다. 약 24시간 후 다시 이용할 수 있어요."}
     if limit == "ip":
         events.log_event("error", anon_id, error_kind="rate_limited")
         response.status_code = 429
-        return {"error": f"하루 {RATE_LIMIT}회까지 사용할 수 있습니다. 내일 다시 시도해주세요."}
+        # 롤링 24h 윈도우라 '내일 자정'이 아니라 '약 24시간 후'가 실제 동작이다(RATE_WINDOW_S 주석 참조).
+        return {
+            "error": f"하루 {RATE_LIMIT}회까지 사용할 수 있습니다. 약 24시간 후 다시 이용할 수 있어요."
+        }
 
     try:
         record = analyze(body.job, body.resume)

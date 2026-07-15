@@ -1,5 +1,12 @@
-# secrets
+# secrets — .env뿐 아니라 .env.save 같은 백업 사본도 전부 막는다.
+# 실제로 .env.save에 진짜 키가 든 채 gitignore 밖에 있었던 적이 있다(D3에 발견).
 .env
+.env.*
+!.env.example
+
+# OMC 에이전트 운영 상태 — 코드가 아니다
+.omc/
+web/.omc/
 
 # 실제 이력서/공고. 샘플과 절대 섞지 않는다.
 data/private/

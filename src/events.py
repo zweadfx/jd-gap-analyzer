@@ -23,7 +23,10 @@ localStorage + 명시적 헤더 전송이 유일하게 확실한 방법이다.
 
 import json
 import os
+import sys
+import threading
 import time
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -95,3 +98,70 @@ def log_event(
     EVENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with EVENTS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    # 같은 메타 페이로드를 디스코드로도 한 줄 보낸다. row에는 공고/문서 원문·quote가
+    # 애초에 없으므로(위 시그니처가 막는다) 유출이 구조적으로 불가능하다.
+    _notify_discord(row)
+
+
+# ---------------------------------------------------------------------------
+# 디스코드 웹훅 — 홍보 당일 조기경보. 대시보드·집계 없음. 알림 한 줄 POST가 전부다.
+# ---------------------------------------------------------------------------
+
+# page_view는 시끄러워서 제외한다.
+_DISCORD_EVENTS = {"submit", "result_shown", "error", "feedback"}
+# error 알림 스팸 방지: 같은 error_kind는 이 간격 안에 한 번만 보낸다.
+# (전역 한도 초과 시 매 요청이 error를 찍어도 디스코드가 도배되지 않게)
+_ERROR_ALERT_THROTTLE_S = 300
+_last_error_alert: dict[str, float] = {}
+
+
+def _format_discord(row: dict) -> str:
+    ev = row.get("event")
+    if ev == "submit":
+        return f"📥 **submit** · 공고 {row.get('job_chars')}자 · 문서 {row.get('resume_chars')}자"
+    if ev == "result_shown":
+        return (
+            f"✅ **result_shown** · 요구사항 {row.get('requirements_count')} · "
+            f"인용 {row.get('quotes_offered')} · 강등 {row.get('demoted_count')} · "
+            f"발견 {row.get('evidence_found')} · {row.get('latency_s')}s · ${row.get('cost_usd')}"
+        )
+    if ev == "error":
+        return f"🚨 **error** · kind=`{row.get('error_kind')}`"
+    if ev == "feedback":
+        return f"💬 **feedback** · {row.get('feedback_text')}"
+    return str(ev)
+
+
+def _notify_discord(row: dict) -> None:
+    """이벤트 메타를 디스코드로 한 줄 전송. fire-and-forget.
+
+    - DISCORD_WEBHOOK_URL 미설정이면 조용히 비활성.
+    - 데몬 스레드로 보내 유저 요청을 절대 막지 않는다. 실패는 로그만 남기고 삼킨다.
+    - row는 log_event가 만든 메타 dict 그대로다 — 새 데이터를 만들지 않는다.
+    """
+    url = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if not url:
+        return
+    ev = row.get("event")
+    if ev not in _DISCORD_EVENTS:
+        return
+    if ev == "error":
+        kind = str(row.get("error_kind", ""))
+        now = time.time()
+        if now - _last_error_alert.get(kind, 0.0) < _ERROR_ALERT_THROTTLE_S:
+            return
+        _last_error_alert[kind] = now
+    content = _format_discord(row)
+
+    def _post() -> None:
+        try:
+            data = json.dumps({"content": content}).encode("utf-8")
+            req = urllib.request.Request(
+                url, data=data, headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception as exc:  # noqa: BLE001 - 웹훅 실패는 유저 요청에 영향 없다
+            print(f"[events] discord webhook 실패: {type(exc).__name__}", file=sys.stderr)
+
+    threading.Thread(target=_post, daemon=True).start()

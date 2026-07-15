@@ -23,12 +23,14 @@ localStorage + 명시적 헤더 전송이 유일하게 확실한 방법이다.
 
 import json
 import os
+import statistics
 import sys
 import threading
 import time
 import urllib.request
 import uuid
-from datetime import UTC, datetime
+from collections import Counter
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -56,6 +58,87 @@ TEST_ANON_PREFIXES = ("verify_", "embed")
 def is_test_anon(anon_id: str) -> bool:
     """퍼널 집계에서 제외할 테스트 이벤트인가. 집계 코드는 반드시 이 함수로 거른다."""
     return anon_id.startswith(TEST_ANON_PREFIXES)
+
+
+# 자정 경계는 KST로 자른다. 서버 ts는 UTC epoch이지만 이 지표를 보는 사람은 한국에 있고,
+# "7/15에 몇 명"은 KST 기준이어야 직관과 맞는다.
+KST = timezone(timedelta(hours=9))
+
+# ── 재방문 정의 (데이터 확인 전 사전 정의, 2026-07-15 확정) ────────────────────────────
+# 재방문자 = 같은 anon_id가 "서로 다른 KST 날짜 2일 이상"에 이벤트를 남긴 사람.
+# 하루에 몇 번을 오든 그날은 1일로 센다(날짜 집합의 크기 ≥ 2). 이벤트 종류는 가리지 않는다.
+# **결과를 보고 이 정의를 바꾸지 않는다.** summarize_events.py와 일일 다이제스트가 이 상수를 공유한다.
+REVISIT_MIN_DAYS = 2
+
+
+def kst_date(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=KST).strftime("%Y-%m-%d")
+
+
+def aggregate_events(events: list[dict]) -> dict:
+    """이벤트 리스트 → 퍼널 지표 dict. 테스트 이벤트(is_test_anon)는 항상 제외한다.
+
+    CLI 표(summarize_events.py)와 일일 디스코드 다이제스트가 이 함수 하나를 공유한다.
+    스코프(--since, 당일 등)는 호출자가 events를 걸러서 넘긴다. 테스트 제외만 여기서 강제한다 —
+    어느 소비처든 검증용 이벤트를 실수로 셈에 넣지 못하게.
+    """
+    events = [e for e in events if "ts" in e and "event" in e]
+    test_excluded = sum(1 for e in events if is_test_anon(e.get("anon_id", "")))
+    events = [e for e in events if not is_test_anon(e.get("anon_id", ""))]
+
+    by_event: dict[str, list[dict]] = {}
+    for e in events:
+        by_event.setdefault(e["event"], []).append(e)
+
+    def anons(name: str) -> set[str]:
+        return {e["anon_id"] for e in by_event.get(name, [])}
+
+    pv, sub, res = anons("page_view"), anons("submit"), anons("result_shown")
+
+    dates_by_anon: dict[str, set[str]] = {}
+    for e in events:
+        dates_by_anon.setdefault(e["anon_id"], set()).add(kst_date(e["ts"]))
+    revisit = sorted(
+        ((a, sorted(ds)) for a, ds in dates_by_anon.items() if len(ds) >= REVISIT_MIN_DAYS),
+        key=lambda kv: -len(kv[1]),
+    )
+
+    errs = by_event.get("error", [])
+
+    daily: dict[str, dict[str, set[str]]] = {}
+    for e in events:
+        d = daily.setdefault(kst_date(e["ts"]), {})
+        d.setdefault(e["event"], set()).add(e["anon_id"])
+    daily_rows = [
+        (
+            day,
+            len(d.get("page_view", set())),
+            len(d.get("submit", set())),
+            len(d.get("result_shown", set())),
+        )
+        for day, d in sorted(daily.items())
+    ]
+
+    costs = [e["cost_usd"] for e in events if "cost_usd" in e]
+    lats = [e["latency_s"] for e in events if "latency_s" in e]
+
+    return {
+        "n_events": len(events),
+        "test_excluded": test_excluded,
+        "visitors": len(pv),
+        "users": len(res),
+        "funnel": {"page_view": len(pv), "submit": len(sub), "result_shown": len(res)},
+        "total_anon": len(dates_by_anon),
+        "revisitors": len(revisit),
+        "revisit_detail": revisit,
+        "errors": len(errs),
+        "error_kinds": Counter(e.get("error_kind", "?") for e in errs).most_common(),
+        "daily": daily_rows,
+        "total_cost": sum(costs),
+        "median_latency": statistics.median(lats) if lats else None,
+        "latency_min": min(lats) if lats else None,
+        "latency_max": max(lats) if lats else None,
+    }
 
 
 def new_anon_id() -> str:
@@ -185,33 +268,23 @@ def _build_embed(row: dict) -> dict:
     return embed
 
 
-def _notify_discord(row: dict) -> None:
-    """이벤트 메타를 디스코드로 한 줄 전송. fire-and-forget.
+def _post_discord_payload(payload: dict) -> None:
+    """디스코드 웹훅으로 payload를 데몬 스레드에서 POST. fire-and-forget.
 
     - DISCORD_WEBHOOK_URL 미설정이면 조용히 비활성.
-    - 데몬 스레드로 보내 유저 요청을 절대 막지 않는다. 실패는 로그만 남기고 삼킨다.
-    - row는 log_event가 만든 메타 dict 그대로다 — 새 데이터를 만들지 않는다.
+    - 실패는 로그만 남기고 삼킨다. 유저 요청도 스케줄러도 절대 막지 않는다.
+    - User-Agent 필수: 디스코드 앞단 Cloudflare가 urllib 기본 UA를 봇으로 보고 403(error code
+      1010)으로 막는다(curl은 통과해서 URL 검증만으론 안 잡힌다). 실측: UA 없음→403 / 있음→204.
+
+    이벤트 알림(_notify_discord)과 일일 다이제스트(send_digest)가 이 전송부를 공유한다.
     """
     url = os.getenv("DISCORD_WEBHOOK_URL", "")
     if not url:
         return
-    ev = row.get("event")
-    if ev not in _DISCORD_EVENTS:
-        return
-    if ev == "error":
-        kind = str(row.get("error_kind", ""))
-        now = time.time()
-        if now - _last_error_alert.get(kind, 0.0) < _ERROR_ALERT_THROTTLE_S:
-            return
-        _last_error_alert[kind] = now
-    embed = _build_embed(row)
 
     def _post() -> None:
         try:
-            data = json.dumps({"embeds": [embed]}).encode("utf-8")
-            # User-Agent를 반드시 넣는다. 디스코드 앞단 Cloudflare가 urllib 기본 UA를
-            # 봇으로 보고 403(error code 1010)으로 막는다 — curl은 통과해서 URL 검증만으론
-            # 안 잡힌다. 실측: UA 없음→403 / UA 있음→204. 아무 UA나 있으면 통과한다.
+            data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(
                 url,
                 data=data,
@@ -221,7 +294,126 @@ def _notify_discord(row: dict) -> None:
                 },
             )
             urllib.request.urlopen(req, timeout=5)
-        except Exception as exc:  # noqa: BLE001 - 웹훅 실패는 유저 요청에 영향 없다
+        except Exception as exc:  # noqa: BLE001 - 웹훅 실패는 서비스에 영향 없다
             print(f"[events] discord webhook 실패: {type(exc).__name__}", file=sys.stderr)
 
     threading.Thread(target=_post, daemon=True).start()
+
+
+def _notify_discord(row: dict) -> None:
+    """이벤트 메타를 디스코드 embed로 전송. row 외 새 데이터는 만들지 않는다."""
+    ev = row.get("event")
+    if ev not in _DISCORD_EVENTS:
+        return
+    if not os.getenv("DISCORD_WEBHOOK_URL", ""):
+        return
+    if ev == "error":
+        kind = str(row.get("error_kind", ""))
+        now = time.time()
+        if now - _last_error_alert.get(kind, 0.0) < _ERROR_ALERT_THROTTLE_S:
+            return
+        _last_error_alert[kind] = now
+    _post_discord_payload({"embeds": [_build_embed(row)]})
+
+
+# ---------------------------------------------------------------------------
+# 일일 요약 다이제스트 — 당일 지표 + 재방문 누적을 embed 1개로. 매일 22:00 KST 자동 발송 +
+# /admin/digest 온디맨드. aggregate_events()를 CLI 집계와 공유한다(같은 함수 재사용).
+# ---------------------------------------------------------------------------
+
+# 이벤트 embed와 겹치지 않는 디스코드 블러플. "지표 요약"이라는 다른 종류임을 색으로 구분한다.
+_DIGEST_COLOR = 0x5865F2
+
+
+def _read_events_file() -> list[dict]:
+    """EVENTS_PATH(볼륨)의 JSONL을 읽어 이벤트 리스트로. 파일 없으면 빈 리스트."""
+    if not EVENTS_PATH.exists():
+        return []
+    out: list[dict] = []
+    for ln in EVENTS_PATH.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            out.append(json.loads(ln))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def build_digest_embed(day: str, today: dict, cumulative: dict) -> dict:
+    """당일 지표(today) + 재방문 누적(cumulative)을 embed 1개로. aggregate_events 결과를 읽는다."""
+    f = today["funnel"]
+    conv = f"{f['result_shown'] / f['page_view']:.0%}" if f["page_view"] else "—"
+    med = today["median_latency"]
+    fields = [
+        _field("방문", today["visitors"]),
+        _field("사용자", today["users"]),
+        _field("전환(방문→결과)", conv),
+        _field("재방문(누적)", cumulative["revisitors"]),
+        _field("에러", today["errors"]),
+        _field("비용", f"${today['total_cost']:.4f}"),
+        _field("지연중앙", f"{med:.1f}s" if med is not None else "—"),
+    ]
+    embed = {
+        "title": f"📊 일일 요약 · {day} (KST)",
+        "color": _DIGEST_COLOR,
+        "fields": fields,
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+        "footer": {"text": f"집계 {today['n_events']}건 · 테스트 {today['test_excluded']}건 제외"},
+    }
+    if today["error_kinds"]:
+        embed["description"] = "에러 kind: " + ", ".join(
+            f"{k} {n}" for k, n in today["error_kinds"]
+        )
+    return embed
+
+
+def send_digest(day: str | None = None) -> dict:
+    """당일(KST) 지표 + 재방문 누적을 디스코드로 embed 1개 전송. fire-and-forget.
+
+    스케줄러(매일 22:00 KST)와 /admin/digest가 공유한다. 반환값은 엔드포인트 응답용 요약이다
+    (전송은 데몬 스레드라 반환 시점에 도착 보장은 없다 — 채널에서 눈으로 확인한다).
+    """
+    all_events = _read_events_file()
+    target_day = day or kst_date(int(time.time()))
+    today_events = [e for e in all_events if "ts" in e and kst_date(e["ts"]) == target_day]
+    today = aggregate_events(today_events)
+    cumulative = aggregate_events(all_events)
+    _post_discord_payload({"embeds": [build_digest_embed(target_day, today, cumulative)]})
+    return {
+        "day": target_day,
+        "visitors": today["visitors"],
+        "users": today["users"],
+        "errors": today["errors"],
+        "revisitors_cumulative": cumulative["revisitors"],
+        "cost_usd": round(today["total_cost"], 4),
+    }
+
+
+def _seconds_until_kst(hour: int, minute: int = 0) -> float:
+    now = datetime.now(tz=KST)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+def start_daily_digest_scheduler(hour: int = 22, minute: int = 0) -> None:
+    """매일 지정 KST 시각에 send_digest()를 부르는 데몬 스레드를 띄운다.
+
+    cron 인프라를 새로 만들지 않는다 — 프로세스 안의 데몬 스레드다(인메모리 레이트리밋과 같은 수준).
+    프로세스가 죽으면 사라진다. 인스턴스 1대 전제(레이트리밋과 동일 전제)라 중복 발송이 없다.
+    DISCORD_WEBHOOK_URL이 없으면 send_digest가 내부에서 no-op이므로 루프만 돌 뿐 무해하다.
+    """
+
+    def _loop() -> None:
+        while True:
+            time.sleep(_seconds_until_kst(hour, minute))
+            try:
+                send_digest()
+            except Exception as exc:  # noqa: BLE001 - 다이제스트 실패가 서비스를 죽이면 안 된다
+                print(f"[events] 일일 다이제스트 실패: {type(exc).__name__}", file=sys.stderr)
+            time.sleep(60)  # 같은 분에 두 번 깨어 두 번 발송하는 것을 방지
+
+    threading.Thread(target=_loop, daemon=True).start()

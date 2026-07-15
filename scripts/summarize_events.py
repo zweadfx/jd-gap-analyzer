@@ -14,36 +14,25 @@
     uv run python scripts/summarize_events.py events.json --since 2026-07-16
 
 입력은 /admin/events의 JSON 응답 또는 raw JSONL 둘 다 받는다(자동 판별).
-TEST_ANON_PREFIXES(verify_·embed)로 검증용 이벤트를 제외한다 — 이미 커밋된 그 상수를 재사용한다.
-집계에 가짜가 섞이면 'N명이 썼다'가 틀린다. 삭제 엔드포인트가 없어(SSH 차단) 필터가 유일한 방어선이다.
+집계 로직은 src.events.aggregate_events 하나를 쓴다 — 일일 디스코드 다이제스트와 같은 함수다.
+테스트 이벤트(is_test_anon: verify_·embed)는 그 함수 안에서 항상 제외된다.
+
+재방문 정의(데이터 확인 전 사전 정의, 2026-07-15 확정): 같은 anon_id가 서로 다른 KST 날짜
+REVISIT_MIN_DAYS(=2)일 이상에 이벤트를 남긴 사람. 정의 원문은 src/events.py에 박혀 있다.
 """
 
 import json
-import statistics
 import sys
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.events import TEST_ANON_PREFIXES, is_test_anon  # noqa: E402
-
-# 자정 경계는 KST로 자른다. 서버 ts는 UTC epoch이지만, 이 표를 보는 사람은 한국에 있고
-# "7/15에 몇 명"은 KST 기준이어야 직관과 맞는다.
-KST = timezone(timedelta(hours=9))
-
-
-def kst_date(ts: int) -> str:
-    return datetime.fromtimestamp(ts, tz=KST).strftime("%Y-%m-%d")
-
-
-# ── 재방문 정의 (데이터 보기 전 사전 확정, 2026-07-15) ─────────────────────────────
-# 재방문자 = 같은 anon_id가 "서로 다른 KST 날짜 2일 이상"에 이벤트를 남긴 사람.
-# 하루에 몇 번을 오든 그날은 1일로 센다(날짜 집합의 크기 ≥ 2). 이벤트 종류는 가리지 않는다
-# — 돌아온 사람은 어차피 page_view를 다시 찍는다. README의 "page_view가 다른 날에 있으면"을
-# 이 스크립트에서 이렇게 조작적으로 고정한다. **결과를 보고 이 정의를 바꾸지 않는다.**
-REVISIT_MIN_DAYS = 2
+from src.events import (  # noqa: E402
+    REVISIT_MIN_DAYS,
+    TEST_ANON_PREFIXES,
+    aggregate_events,
+    kst_date,
+)
 
 
 def load_events(path: Path) -> list[dict]:
@@ -102,11 +91,7 @@ def main() -> int:
 
     events = load_events(path)
     total_raw = len(events)
-    # ts/event가 없는 줄은 이벤트가 아니다.
     events = [e for e in events if "ts" in e and "event" in e]
-
-    test_n = sum(1 for e in events if is_test_anon(e.get("anon_id", "")))
-    events = [e for e in events if not is_test_anon(e.get("anon_id", ""))]
 
     since_excluded = 0
     if since:
@@ -114,92 +99,74 @@ def main() -> int:
         events = [e for e in events if kst_date(e["ts"]) >= since]
         since_excluded = before - len(events)
 
+    # 집계는 공유 함수 하나로. 테스트 이벤트 제외는 이 안에서 강제된다.
+    agg = aggregate_events(events)
+
     print(f"입력: {path}  (원본 {total_raw}건)")
-    excl = f"테스트 {test_n}건 {TEST_ANON_PREFIXES}"
+    excl = f"테스트 {agg['test_excluded']}건 {TEST_ANON_PREFIXES}"
     if since:
         excl += f" · --since {since} 이전 {since_excluded}건"
     print(f"제외: {excl}")
-    print(f"집계 대상: {len(events)}건")
-    if not events:
+    print(f"집계 대상: {agg['n_events']}건")
+    if agg["n_events"] == 0:
         print("집계할 이벤트가 없습니다.")
         return 1
 
-    by_event: dict[str, list[dict]] = defaultdict(list)
-    for e in events:
-        by_event[e["event"]].append(e)
-
-    def anons(name: str) -> set[str]:
-        return {e["anon_id"] for e in by_event.get(name, [])}
-
-    pv, sub, res = anons("page_view"), anons("submit"), anons("result_shown")
+    f = agg["funnel"]
+    pv, sub, res = f["page_view"], f["submit"], f["result_shown"]
 
     # a·b. 방문자 / 사용자
     print("\n■ 규모")
     print("─" * 60)
-    print(f"  방문자 (page_view distinct anon)   {len(pv):>5}")
-    print(f"  사용자 (result_shown distinct anon) {len(res):>5}")
+    print(f"  방문자 (page_view distinct anon)   {agg['visitors']:>5}")
+    print(f"  사용자 (result_shown distinct anon) {agg['users']:>5}")
 
     # c. 퍼널
     print("\n■ 퍼널  page_view → submit → result_shown")
     print("─" * 60)
     print(f"  {'단계':<14}{'anon 수':>8}{'직전 대비':>10}{'전체 대비':>10}")
-    print(f"  {'page_view':<14}{len(pv):>8}{'  —':>10}{'  —':>10}")
-    print(
-        f"  {'submit':<14}{len(sub):>8}{_rate(len(sub), len(pv)):>10}{_rate(len(sub), len(pv)):>10}"
-    )
-    print(
-        f"  {'result_shown':<14}{len(res):>8}{_rate(len(res), len(sub)):>10}{_rate(len(res), len(pv)):>10}"
-    )
-    if len(sub) > len(pv):
+    print(f"  {'page_view':<14}{pv:>8}{'  —':>10}{'  —':>10}")
+    print(f"  {'submit':<14}{sub:>8}{_rate(sub, pv):>10}{_rate(sub, pv):>10}")
+    print(f"  {'result_shown':<14}{res:>8}{_rate(res, sub):>10}{_rate(res, pv):>10}")
+    if sub > pv:
         print(
             "  ⚠️ submit이 page_view보다 많다 — page_view 없이 바로 제출한 anon이 있다(직접 유입/로깅 누락)."
         )
 
     # d. 재방문
-    dates_by_anon: dict[str, set[str]] = defaultdict(set)
-    for e in events:
-        dates_by_anon[e["anon_id"]].add(kst_date(e["ts"]))
-    returning = {a: ds for a, ds in dates_by_anon.items() if len(ds) >= REVISIT_MIN_DAYS}
     print(f"\n■ 재방문  (같은 anon_id가 서로 다른 KST 날짜 {REVISIT_MIN_DAYS}일 이상)")
     print("─" * 60)
     print(
-        f"  재방문자 {len(returning)} / 전체 anon {len(dates_by_anon)}  ({_rate(len(returning), len(dates_by_anon)).strip()})"
+        f"  재방문자 {agg['revisitors']} / 전체 anon {agg['total_anon']}  "
+        f"({_rate(agg['revisitors'], agg['total_anon']).strip()})"
     )
-    for a, ds in sorted(returning.items(), key=lambda kv: -len(kv[1]))[:10]:
-        print(f"    …{a[-6:]}  {len(ds)}일  ({', '.join(sorted(ds))})")
+    for a, ds in agg["revisit_detail"][:10]:
+        print(f"    …{a[-6:]}  {len(ds)}일  ({', '.join(ds)})")
 
     # e. 에러
-    errs = by_event.get("error", [])
-    print(f"\n■ 에러  (총 {len(errs)}건)")
+    print(f"\n■ 에러  (총 {agg['errors']}건)")
     print("─" * 60)
-    if errs:
-        for kind, n in Counter(e.get("error_kind", "?") for e in errs).most_common():
+    if agg["error_kinds"]:
+        for kind, n in agg["error_kinds"]:
             print(f"  {kind:<24}{n:>5}")
     else:
         print("  (없음)")
 
     # f. 일별 추이
-    daily: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
-    for e in events:
-        daily[kst_date(e["ts"])][e["event"]].add(e["anon_id"])
     print("\n■ 일별 추이  (distinct anon)")
     print("─" * 60)
     print(f"  {'날짜(KST)':<12}{'방문':>7}{'제출':>7}{'결과':>7}")
-    for d in sorted(daily):
-        row = daily[d]
-        print(
-            f"  {d:<12}{len(row.get('page_view', set())):>7}{len(row.get('submit', set())):>7}{len(row.get('result_shown', set())):>7}"
-        )
+    for day, d_pv, d_sub, d_res in agg["daily"]:
+        print(f"  {day:<12}{d_pv:>7}{d_sub:>7}{d_res:>7}")
 
-    # g. 운영 (비용·지연) — result_shown에만 실린다.
-    costs = [e["cost_usd"] for e in events if "cost_usd" in e]
-    lats = [e["latency_s"] for e in events if "latency_s" in e]
+    # g. 운영 (비용·지연)
     print("\n■ 운영")
     print("─" * 60)
-    print(f"  총 API 비용  ${sum(costs):.4f}  ({len(costs)}회 result_shown)")
-    if lats:
+    print(f"  총 API 비용  ${agg['total_cost']:.4f}")
+    med = agg["median_latency"]
+    if med is not None:
         print(
-            f"  지연 중앙값  {statistics.median(lats):.1f}s  (min {min(lats):.1f} / max {max(lats):.1f})"
+            f"  지연 중앙값  {med:.1f}s  (min {agg['latency_min']:.1f} / max {agg['latency_max']:.1f})"
         )
     else:
         print("  지연 중앙값  — (result_shown 없음)")

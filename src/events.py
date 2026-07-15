@@ -43,6 +43,20 @@ MAX_FEEDBACK_CHARS = 500
 # 안 하면 재배포마다 퍼널이 초기화되어 "N명이 썼다"를 증명할 수 없게 된다.
 EVENTS_PATH = Path(os.getenv("EVENTS_PATH", "out/private/events.jsonl"))
 
+# 테스트 이벤트 제외 — 퍼널 집계("N명이 썼다") 시 반드시 이 prefix로 시작하는 anon_id를 뺀다.
+# 검증하며 실서버에 쏜 이벤트가 events.jsonl에 그대로 남고, 삭제 엔드포인트가 없어(SSH 차단)
+# 사후 제거가 불가능하다. 걸러내지 않으면 D5 집계의 "N명"에 가짜가 섞인다 — 방어선은 이 필터뿐이다.
+#
+# ⚠️ 앞으로 테스트 이벤트의 anon_id는 무조건 "verify_" 하나만 쓴다. 새 prefix를 만들지 마라.
+#    "embed"는 과거에 이미 새 나간 흔적이라 하위호환으로 남겨둘 뿐이다. prefix가 세 종류,
+#    네 종류로 늘면 언젠가 하나를 빠뜨린다. 종류 증식을 여기서 끊는다.
+TEST_ANON_PREFIXES = ("verify_", "embed")
+
+
+def is_test_anon(anon_id: str) -> bool:
+    """퍼널 집계에서 제외할 테스트 이벤트인가. 집계 코드는 반드시 이 함수로 거른다."""
+    return anon_id.startswith(TEST_ANON_PREFIXES)
+
 
 def new_anon_id() -> str:
     """프론트가 id를 안 보냈을 때의 폴백. 정상 경로에서는 프론트가 만든다."""

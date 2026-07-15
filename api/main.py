@@ -20,7 +20,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError, AuthenticationError
 from pydantic import BaseModel, Field
@@ -150,6 +150,22 @@ def to_response(record: RunRecord) -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True, "limits": {"job": MAX_JOB_CHARS, "resume": MAX_RESUME_CHARS}}
+
+
+# 진단 전용 — 영구 볼륨(EVENTS_PATH)에 이벤트가 실제로 쌓이는지 HTTPS로 확인한다.
+# 이 샌드박스에서 Railway SSH/SFTP egress가 막혀 볼륨 파일을 직접 못 읽어서 둔 우회로다.
+# ADMIN_TOKEN이 없으면 통째로 404(존재 자체를 숨긴다). events.jsonl은 설계상 원문이
+# 없고 메타/anon_id만 있지만, 그래도 토큰으로 잠근다. 검증 끝나면 토큰만 지우면 비활성화된다.
+@app.get("/admin/events")
+def admin_events(token: str = "", n: int = 50) -> dict:
+    admin_token = os.getenv("ADMIN_TOKEN", "")
+    if not admin_token or token != admin_token:
+        raise HTTPException(status_code=404)
+    path = events.EVENTS_PATH
+    if not path.exists():
+        return {"path": str(path), "exists": False, "count": 0, "lines": []}
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return {"path": str(path), "exists": True, "count": len(lines), "lines": lines[-n:]}
 
 
 @app.post("/events/page_view")

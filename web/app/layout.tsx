@@ -5,9 +5,10 @@ import ThemeToggle from "./theme-toggle";
 // 커뮤니티에 링크가 올라가면 사람들이 처음 보는 건 이 카드다. 유입의 첫 관문.
 const SITE = "https://jd-gap-zweadfxs-projects.vercel.app";
 const OG_TITLE = "공고는 요구하는데, 내 서류엔 없는 것 3가지";
-// 카톡 프리뷰는 뒤를 자른다. "무료, 저장 안 함"이 클릭 결정에 직접 작용하므로 앞으로 당긴다.
+// 모바일 카톡은 표시 폭이 더 좁아 문장 뒤가 더 많이 잘린다 — 신뢰 신호(무료·로그인 없음·저장
+// 안 함)를 맨 앞으로 당겨 잘려도 남게 한다. 또 이전 문구는 제목과 같은 말을 반복했다.
 const OG_DESC =
-  "공고가 요구하는데 서류에 근거 없는 항목 Top 3를 원문 인용과 함께. 무료, 저장 안 함.";
+  "무료 · 로그인 없음 · 문서 저장 안 함 | 공고와 이력서를 붙여넣으면 바로 확인됩니다.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),

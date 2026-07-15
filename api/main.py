@@ -60,6 +60,11 @@ app.add_middleware(
 RATE_LIMIT = int(os.getenv("RATE_LIMIT_PER_DAY", "20"))
 # 전역 500회/일 → 실행당 ~$0.0032 기준 하루 최대 ~$1.6. 하드 캡.
 GLOBAL_DAILY_LIMIT = int(os.getenv("GLOBAL_DAILY_LIMIT", "500"))
+# ⚠️ 이건 "자정 리셋"이 아니라 롤링 24시간 슬라이딩 윈도우다. UTC/KST 자정 경계가 없다.
+# time.time()은 timezone 무관한 경과 초이고, _prune()이 now-hit > 86400인 히트만 버린다
+# → 각 요청은 자기가 찍힌 시각 +24h에 개별 만료된다. 막힌 유저의 슬롯은 자정이 아니라
+# 자신의 가장 오래된 카운트 요청 +24h에 돌아온다. 유저 안내문("하루 N회"·"내일 다시")은
+# 달력일 리셋처럼 읽히지만 구현은 롤링이다 — 홍보 당일 이 차이를 알고 로그를 읽을 것.
 RATE_WINDOW_S = 24 * 3600
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _global_hits: deque[float] = deque()

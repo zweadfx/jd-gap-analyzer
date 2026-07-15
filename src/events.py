@@ -157,8 +157,16 @@ def _notify_discord(row: dict) -> None:
     def _post() -> None:
         try:
             data = json.dumps({"content": content}).encode("utf-8")
+            # User-Agent를 반드시 넣는다. 디스코드 앞단 Cloudflare가 urllib 기본 UA를
+            # 봇으로 보고 403(error code 1010)으로 막는다 — curl은 통과해서 URL 검증만으론
+            # 안 잡힌다. 실측: UA 없음→403 / UA 있음→204. 아무 UA나 있으면 통과한다.
             req = urllib.request.Request(
-                url, data=data, headers={"Content-Type": "application/json"}
+                url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "jd-gap-analyzer/1.0 (+webhook)",
+                },
             )
             urllib.request.urlopen(req, timeout=5)
         except Exception as exc:  # noqa: BLE001 - 웹훅 실패는 유저 요청에 영향 없다

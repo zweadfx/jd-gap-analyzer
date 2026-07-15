@@ -28,6 +28,7 @@ import threading
 import time
 import urllib.request
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -116,21 +117,58 @@ _ERROR_ALERT_THROTTLE_S = 300
 _last_error_alert: dict[str, float] = {}
 
 
-def _format_discord(row: dict) -> str:
+# 이벤트별 embed 색(10진). 채널에서 색만 보고 종류를 가른다. error는 빨강 — 홍보 당일
+# 눈에 확 띄어야 하는 유일한 메시지다.
+_EMBED_COLOR = {
+    "submit": 0x3498DB,  # 파랑
+    "result_shown": 0x2ECC71,  # 초록
+    "error": 0xE74C3C,  # 빨강
+    "feedback": 0x9B59B6,  # 보라
+}
+
+
+def _field(name: str, value: object, inline: bool = True) -> dict:
+    return {"name": name, "value": str(value), "inline": inline}
+
+
+def _build_embed(row: dict) -> dict:
+    """메타 row → 디스코드 embed. 형식만 바꾼다 — row 필드 외 새 데이터는 만들지 않는다.
+
+    - footer의 anon_id 뒤 6자리는 미관이 아니라 기능이다: 동시 유저가 여럿일 때
+      어느 submit이 어느 result_shown과 같은 사람인지 채널에서 눈으로 짝지을 수 있어야 한다.
+    - timestamp는 embed 규격 필드로 넣어 디스코드가 뷰어 로컬 시간으로 자동 렌더하게 한다.
+    """
     ev = row.get("event")
+    embed = {
+        "color": _EMBED_COLOR.get(str(ev), 0x95A5A6),
+        "timestamp": datetime.fromtimestamp(row["ts"], tz=UTC).isoformat(),
+        "footer": {"text": f"id …{str(row.get('anon_id', ''))[-6:]}"},
+    }
     if ev == "submit":
-        return f"📥 **submit** · 공고 {row.get('job_chars')}자 · 문서 {row.get('resume_chars')}자"
-    if ev == "result_shown":
-        return (
-            f"✅ **result_shown** · 요구사항 {row.get('requirements_count')} · "
-            f"인용 {row.get('quotes_offered')} · 강등 {row.get('demoted_count')} · "
-            f"발견 {row.get('evidence_found')} · {row.get('latency_s')}s · ${row.get('cost_usd')}"
-        )
-    if ev == "error":
-        return f"🚨 **error** · kind=`{row.get('error_kind')}`"
-    if ev == "feedback":
-        return f"💬 **feedback** · {row.get('feedback_text')}"
-    return str(ev)
+        embed["title"] = "📥 새 분석 요청"
+        embed["fields"] = [
+            _field("공고", f"{row.get('job_chars')}자"),
+            _field("문서", f"{row.get('resume_chars')}자"),
+        ]
+    elif ev == "result_shown":
+        embed["title"] = "✅ 결과 전달"
+        embed["fields"] = [
+            _field("요구사항", row.get("requirements_count")),
+            _field("인용", row.get("quotes_offered")),
+            _field("강등", row.get("demoted_count")),
+            _field("발견", row.get("evidence_found")),
+            _field("지연", f"{row.get('latency_s')}s"),
+            _field("비용", f"${row.get('cost_usd')}"),
+        ]
+    elif ev == "error":
+        embed["title"] = f"🔴 에러: {row.get('error_kind')}"
+    elif ev == "feedback":
+        embed["title"] = "💬 제보"
+        # feedback_text는 설계상 허용된 유일한 자유 텍스트 필드다(log_event가 상한으로 자른다).
+        embed["description"] = row.get("feedback_text") or ""
+    else:
+        embed["title"] = str(ev)
+    return embed
 
 
 def _notify_discord(row: dict) -> None:
@@ -152,11 +190,11 @@ def _notify_discord(row: dict) -> None:
         if now - _last_error_alert.get(kind, 0.0) < _ERROR_ALERT_THROTTLE_S:
             return
         _last_error_alert[kind] = now
-    content = _format_discord(row)
+    embed = _build_embed(row)
 
     def _post() -> None:
         try:
-            data = json.dumps({"content": content}).encode("utf-8")
+            data = json.dumps({"embeds": [embed]}).encode("utf-8")
             # User-Agent를 반드시 넣는다. 디스코드 앞단 Cloudflare가 urllib 기본 UA를
             # 봇으로 보고 403(error code 1010)으로 막는다 — curl은 통과해서 URL 검증만으론
             # 안 잡힌다. 실측: UA 없음→403 / UA 있음→204. 아무 UA나 있으면 통과한다.

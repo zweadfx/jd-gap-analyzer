@@ -148,12 +148,17 @@ h1 {
     transform 0.05s;
 }
 
-.sample:hover {
+/* :not(:disabled)로 특이도를 올려 전역 button:hover(진파랑 배경)를 이긴다. 이게 없으면
+   전역 규칙이 배경을 --blue-strong로 덮는데 글자색은 --blue-strong 그대로라 텍스트가 사라진다.
+   .sample은 보조 CTA라 hover가 어두워지는 게 아니라 밝아진다 — 밝은 배경 + 진파랑 글자로 읽힌다. */
+.sample:hover:not(:disabled) {
   background: #e3eeff;
+  color: var(--blue-strong);
 }
 
-:root[data-theme="dark"] .sample:hover {
+:root[data-theme="dark"] .sample:hover:not(:disabled) {
   background: #1c2c48;
+  color: var(--blue-strong);
 }
 
 .sample:active {

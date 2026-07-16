@@ -163,11 +163,39 @@ export default function Page() {
 
   return (
     <main className="wrap">
-      <h1>공고가 요구하는데, 내 문서에 없는 것</h1>
+      <h1>공고는 요구하는데, 내 서류엔 없는 것 3가지</h1>
       <p className="lede">
         채용 공고와 <strong>이력서 또는 포트폴리오</strong>를 붙여넣으면,{" "}
         <strong>근거가 없는 항목 Top 3</strong>을 원문 인용과 함께 찾아줍니다.
       </p>
+
+      {/* 히어로를 제품 실물로. 마케팅 문구 대신 실제 결과 카드의 정적 축약본을 보여준다 —
+          제품이 텍스트인데 텍스트를 숨길 이유가 없다. 유저 결과가 아니라 예시임을 라벨로 못박는다. */}
+      {!result && !loading && (
+        <div className="example" aria-hidden="true">
+          <span className="example-label">결과는 이렇게 나옵니다</span>
+          <div className="example-gap">
+            <div className="example-gap-head">
+              <span className="example-gap-title">1. Kubernetes 배포·운영 경험 필수</span>
+              <span className="tag req">필수</span>
+            </div>
+            <p className="example-gap-sub">공고엔 있지만 문서엔 근거가 없습니다</p>
+          </div>
+        </div>
+      )}
+
+      {/* 추상적 마케팅 문구 대신 이 프로젝트의 실측 숫자. 구체성이 사람의 지문이다.
+          숫자는 README 측정 표에 있는 것만 쓴다 — 없는 숫자를 만들지 않는다. */}
+      <ul className="trust">
+        <li>
+          <b>LLM이 낸 인용 99건 중 11건</b>이 원문에 없었습니다. 프롬프트가 아니라 코드로 원문과
+          대조해 걸러냅니다.
+        </li>
+        <li>
+          <b>Top 3 정확도 7/8</b> — 사람이 직접 판정했고, 판정 기준은 결과를 보기 전에
+          커밋했습니다.
+        </li>
+      </ul>
 
       <button type="button" className="sample" onClick={loadSample} disabled={sampleLoading || loading}>
         {sampleLoading ? "샘플 불러오는 중…" : "샘플로 체험하기 — 가상의 공고·이력서로 먼저 보기"}
@@ -368,6 +396,14 @@ export default function Page() {
         단위로 대조해, 원문에 없으면 근거로 인정하지 않고 버립니다. 위에 표시된 &lsquo;버린
         인용&rsquo; 건수가 그것입니다.
       </p>
+
+      {/* 사람의 서명. AI 슬롭 페이지는 만든 사람을 절대 밝히지 않는다 — 이 한 줄이 가장 강한 인간 신호다. */}
+      <footer className="signature">
+        <span>취업 준비하면서 만들었습니다. 결과가 이상하면 알려주세요 — 직접 읽습니다.</span>
+        <a href="https://github.com/zweadfx/jd-gap-analyzer" target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+      </footer>
     </main>
   );
 }

@@ -26,7 +26,9 @@
   --ok: #048a54;
   --ok-bg: #e7f7ef;
 
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04);
+  /* 평평하고 건조하게 — 카드는 그림자가 아니라 1px 보더로 구분한다. "AI가 만든 것 같다"는
+     피드백의 절반은 붕 뜬 그림자다. 다크모드는 보더가 약해 그림자가 필요하므로 그대로 둔다. */
+  --card-shadow: none;
   --radius-lg: 20px;
   --radius: 14px;
   --radius-sm: 10px;
@@ -618,6 +620,100 @@ h2 {
   font-weight: 600;
 }
 
+/* --- 히어로 제품 실물: 정적 예시 갭 카드. 그림자 없이 1px 보더로 평평하게 --- */
+.example {
+  margin-top: 28px;
+}
+
+.example-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.example-gap {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  background: var(--bg);
+}
+
+.example-gap-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.example-gap-title {
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.example-gap-sub {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* --- 실측 숫자 신뢰 라인: 좌측 정렬, 건조하게. 숫자만 진하게 --- */
+.trust {
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.trust li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-soft);
+}
+
+.trust li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--line-strong);
+}
+
+.trust b {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/* --- 사람의 서명: 하단 한 줄 + GitHub. 조용하지만 숨기지 않는다 --- */
+.signature {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.signature a {
+  flex: none;
+  color: var(--blue-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.signature a:hover {
+  text-decoration: underline;
+}
+
 /* --- 모바일 375px --- */
 @media (max-width: 480px) {
   .wrap {
@@ -668,9 +764,22 @@ h2 {
     padding: 16px;
   }
 
+  .example-gap-title {
+    font-size: 16px;
+  }
+
+  .example-gap-head {
+    flex-wrap: wrap;
+  }
+
   .brandline {
     flex-direction: column;
     gap: 2px;
+  }
+
+  .signature {
+    flex-direction: column;
+    gap: 6px;
   }
 
   .theme-toggle {

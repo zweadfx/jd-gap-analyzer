@@ -719,6 +719,47 @@ h2 {
   text-decoration: underline;
 }
 
+/* --- 최소 입력 가드 안내: 에러(빨강) 아님. 뉴트럴 톤으로 "더 넣어달라"고 조용히 --- */
+.notice {
+  margin-top: 24px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-soft);
+  color: var(--fg-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.notice strong {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/* --- 빈 결과(요구사항 0개): 빈 화면·거짓 성공("모두 근거 있음") 대신 정직한 안내 --- */
+.empty {
+  padding: 28px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+
+.empty h2 {
+  margin: 0;
+}
+
+.empty-desc {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg-soft);
+}
+
+.empty-desc strong {
+  color: var(--fg);
+  font-weight: 700;
+}
+
 /* --- 모바일 375px --- */
 @media (max-width: 480px) {
   .wrap {

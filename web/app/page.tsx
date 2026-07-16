@@ -8,6 +8,11 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const MAX_JOB = 8000;
 const MAX_RESUME = 12000;
 
+// 최소 입력 길이. 공고 4자·문서 2자 같은 무의미 입력은 요구사항 0개를 반환한다 — 제출 전에 막는다.
+// 조용한 실패 금지: 자르지도, 빈 결과를 그럴듯하게 포장하지도 않는다. 무의미한 API 호출도 아낀다.
+const MIN_JOB = 200;
+const MIN_RESUME = 100;
+
 // 3단계. 파이프라인의 Step 1/2/3과 1:1이다 — Step을 쪼갠 설계가 여기서 UX 배당금을 낸다.
 // 빈 스피너를 10초 보여주면 이탈한다. 무엇을 하고 있는지 보여준다.
 const STEPS = [
@@ -101,7 +106,14 @@ export default function Page() {
 
   const jobOver = job.length > MAX_JOB;
   const resumeOver = resume.length > MAX_RESUME;
-  const canSubmit = job.trim() && resume.trim() && !jobOver && !resumeOver && !loading;
+  const jobShort = job.trim().length > 0 && job.trim().length < MIN_JOB;
+  const resumeShort = resume.trim().length > 0 && resume.trim().length < MIN_RESUME;
+  const canSubmit =
+    job.trim().length >= MIN_JOB &&
+    resume.trim().length >= MIN_RESUME &&
+    !jobOver &&
+    !resumeOver &&
+    !loading;
 
   // 낯선 사이트에 자기 이력서를 바로 붙여넣는 사람은 없다. 가상 샘플로 먼저 보여준다.
   // 샘플 원본은 서버(data/samples/)에 있다. 프론트에 사본을 두면 언젠가 어긋난다.
@@ -257,6 +269,14 @@ export default function Page() {
         </div>
       )}
 
+      {(jobShort || resumeShort) && !jobOver && !resumeOver && (
+        <div className="notice">
+          분석하려면 공고는 {MIN_JOB}자, 문서는 {MIN_RESUME}자 이상이 필요합니다.{" "}
+          <strong>자격요건·우대사항이 포함된 공고 전문</strong>과 이력서·포트폴리오를 붙여넣어
+          주세요. 짧은 입력으로는 요구사항을 뽑을 수 없습니다.
+        </div>
+      )}
+
       {loading && (
         <div className="steps">
           {STEPS.map((s, i) => (
@@ -276,9 +296,19 @@ export default function Page() {
 
       {result && m && (
         <div className="results" ref={resultRef}>
-          <div className="role">{result.role_summary}</div>
+          {m.requirements_count === 0 ? (
+            <div className="empty">
+              <h2>공고에서 요구사항을 찾지 못했습니다</h2>
+              <p className="empty-desc">
+                회사 소개나 짧은 문구가 아니라, <strong>자격요건·우대사항이 포함된 공고 전문</strong>을
+                붙여넣으면 분석할 수 있어요. 이력서·포트폴리오도 함께 넣어주세요.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="role">{result.role_summary}</div>
 
-          <h2>근거 없는 항목 Top 3</h2>
+              <h2>근거 없는 항목 Top 3</h2>
           <p className="sub">필수 &gt; 우대, 기술·경험 &gt; 도메인 &gt; 소프트스킬 순으로 골랐습니다.</p>
           {result.top_gaps.length === 0 && <p className="sub">모든 요구사항에 근거가 있습니다.</p>}
           {result.top_gaps.map((g, i) => (
@@ -340,6 +370,8 @@ export default function Page() {
                 ))}
               </ul>
             </div>
+          )}
+            </>
           )}
 
           {/* 강등 건수는 항상 표시한다 (컨벤션 1조).

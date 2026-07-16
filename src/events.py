@@ -60,6 +60,16 @@ def is_test_anon(anon_id: str) -> bool:
     return anon_id.startswith(TEST_ANON_PREFIXES)
 
 
+def owner_anon_ids() -> set[str]:
+    """소유자 본인 트래픽 제외용 anon_id 집합. 소유자가 자기 브라우저(폰·PC 각각)의
+    localStorage 'jd_anon_id'를 확인해 OWNER_ANON_IDS 환경변수(콤마 구분)에 넣는다.
+
+    is_test_anon과 **별개 축**이다 — 소유자는 테스트가 아니라 소유자다. 그래서 집계에서
+    똑같이 제외하되 카운트 라벨은 따로 센다. 값이 런타임 env라 매 호출에 다시 읽는다.
+    """
+    return {a.strip() for a in os.getenv("OWNER_ANON_IDS", "").split(",") if a.strip()}
+
+
 # 자정 경계는 KST로 자른다. 서버 ts는 UTC epoch이지만 이 지표를 보는 사람은 한국에 있고,
 # "7/15에 몇 명"은 KST 기준이어야 직관과 맞는다.
 KST = timezone(timedelta(hours=9))
@@ -83,8 +93,20 @@ def aggregate_events(events: list[dict]) -> dict:
     어느 소비처든 검증용 이벤트를 실수로 셈에 넣지 못하게.
     """
     events = [e for e in events if "ts" in e and "event" in e]
+    owner_ids = owner_anon_ids()
     test_excluded = sum(1 for e in events if is_test_anon(e.get("anon_id", "")))
-    events = [e for e in events if not is_test_anon(e.get("anon_id", ""))]
+    # 소유자 제외는 테스트와 별개 축이다. 라벨을 나눠 세되(테스트로도 잡힌 건 이중계상 방지),
+    # 집계 대상에서는 둘 다 뺀다.
+    owner_excluded = sum(
+        1
+        for e in events
+        if e.get("anon_id", "") in owner_ids and not is_test_anon(e.get("anon_id", ""))
+    )
+    events = [
+        e
+        for e in events
+        if not is_test_anon(e.get("anon_id", "")) and e.get("anon_id", "") not in owner_ids
+    ]
 
     by_event: dict[str, list[dict]] = {}
     for e in events:
@@ -125,6 +147,7 @@ def aggregate_events(events: list[dict]) -> dict:
     return {
         "n_events": len(events),
         "test_excluded": test_excluded,
+        "owner_excluded": owner_excluded,
         "visitors": len(pv),
         "users": len(res),
         "funnel": {"page_view": len(pv), "submit": len(sub), "result_shown": len(res)},
@@ -341,6 +364,13 @@ def _read_events_file() -> list[dict]:
     return out
 
 
+def _digest_footer(today: dict) -> str:
+    excl = f"테스트 {today['test_excluded']}건"
+    if today.get("owner_excluded"):
+        excl += f" · 소유자 {today['owner_excluded']}건"
+    return f"집계 {today['n_events']}건 · {excl} 제외"
+
+
 def build_digest_embed(day: str, today: dict, cumulative: dict) -> dict:
     """당일 지표(today) + 재방문 누적(cumulative)을 embed 1개로. aggregate_events 결과를 읽는다."""
     f = today["funnel"]
@@ -360,7 +390,7 @@ def build_digest_embed(day: str, today: dict, cumulative: dict) -> dict:
         "color": _DIGEST_COLOR,
         "fields": fields,
         "timestamp": datetime.now(tz=UTC).isoformat(),
-        "footer": {"text": f"집계 {today['n_events']}건 · 테스트 {today['test_excluded']}건 제외"},
+        "footer": {"text": _digest_footer(today)},
     }
     if today["error_kinds"]:
         embed["description"] = "에러 kind: " + ", ".join(

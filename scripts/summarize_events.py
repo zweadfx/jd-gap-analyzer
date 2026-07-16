@@ -16,6 +16,8 @@
 입력은 /admin/events의 JSON 응답 또는 raw JSONL 둘 다 받는다(자동 판별).
 집계 로직은 src.events.aggregate_events 하나를 쓴다 — 일일 디스코드 다이제스트와 같은 함수다.
 테스트 이벤트(is_test_anon: verify_·embed)는 그 함수 안에서 항상 제외된다.
+소유자 본인 트래픽도 제외하려면 OWNER_ANON_IDS 환경변수(콤마 구분)를 이 스크립트 실행 시 넣는다:
+    OWNER_ANON_IDS=abc123,def456 uv run python scripts/summarize_events.py events.json
 
 재방문 정의(데이터 확인 전 사전 정의, 2026-07-15 확정): 같은 anon_id가 서로 다른 KST 날짜
 REVISIT_MIN_DAYS(=2)일 이상에 이벤트를 남긴 사람. 정의 원문은 src/events.py에 박혀 있다.
@@ -104,6 +106,8 @@ def main() -> int:
 
     print(f"입력: {path}  (원본 {total_raw}건)")
     excl = f"테스트 {agg['test_excluded']}건 {TEST_ANON_PREFIXES}"
+    if agg.get("owner_excluded"):
+        excl += f" · 소유자 {agg['owner_excluded']}건 (OWNER_ANON_IDS)"
     if since:
         excl += f" · --since {since} 이전 {since_excluded}건"
     print(f"제외: {excl}")

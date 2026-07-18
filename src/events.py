@@ -297,17 +297,34 @@ def _build_embed(row: dict) -> dict:
     return embed
 
 
-def _post_discord_payload(payload: dict) -> None:
-    """디스코드 웹훅으로 payload를 데몬 스레드에서 POST. fire-and-forget.
+def _webhook_url_for(kind: str) -> str:
+    """이벤트 종류별 목적지 웹훅 URL. 채널 분리는 목적지만 바꾼다 — 페이로드 규칙은 전부 동일.
 
-    - DISCORD_WEBHOOK_URL 미설정이면 조용히 비활성.
+    - feedback → FEEDBACK_WEBHOOK_URL (피드백 채널)
+    - digest   → DIGEST_WEBHOOK_URL (일일요약 채널)
+    - 그 외(submit/result_shown/error) → DISCORD_WEBHOOK_URL (알림 채널, 기존)
+
+    ⚠️ 새 env 미설정 시 DISCORD_WEBHOOK_URL로 폴백한다. 채널 분리 실패로 메시지가 조용히
+       사라지는 일은 없어야 한다(조용한 실패 금지). 전역 한도 초과 error도 알림 채널 유지된다.
+    """
+    base = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if kind == "feedback":
+        return os.getenv("FEEDBACK_WEBHOOK_URL", "") or base
+    if kind == "digest":
+        return os.getenv("DIGEST_WEBHOOK_URL", "") or base
+    return base
+
+
+def _post_discord_payload(payload: dict, url: str) -> None:
+    """디스코드 웹훅 url로 payload를 데몬 스레드에서 POST. fire-and-forget.
+
+    - url이 비면 조용히 비활성.
     - 실패는 로그만 남기고 삼킨다. 유저 요청도 스케줄러도 절대 막지 않는다.
     - User-Agent 필수: 디스코드 앞단 Cloudflare가 urllib 기본 UA를 봇으로 보고 403(error code
       1010)으로 막는다(curl은 통과해서 URL 검증만으론 안 잡힌다). 실측: UA 없음→403 / 있음→204.
 
     이벤트 알림(_notify_discord)과 일일 다이제스트(send_digest)가 이 전송부를 공유한다.
     """
-    url = os.getenv("DISCORD_WEBHOOK_URL", "")
     if not url:
         return
 
@@ -330,11 +347,15 @@ def _post_discord_payload(payload: dict) -> None:
 
 
 def _notify_discord(row: dict) -> None:
-    """이벤트 메타를 디스코드 embed로 전송. row 외 새 데이터는 만들지 않는다."""
+    """이벤트 메타를 디스코드 embed로 전송. row 외 새 데이터는 만들지 않는다.
+
+    feedback은 피드백 채널로, 나머지(submit/result_shown/error)는 알림 채널로 라우팅한다.
+    """
     ev = row.get("event")
     if ev not in _DISCORD_EVENTS:
         return
-    if not os.getenv("DISCORD_WEBHOOK_URL", ""):
+    url = _webhook_url_for(str(ev))
+    if not url:
         return
     if ev == "error":
         kind = str(row.get("error_kind", ""))
@@ -342,7 +363,7 @@ def _notify_discord(row: dict) -> None:
         if now - _last_error_alert.get(kind, 0.0) < _ERROR_ALERT_THROTTLE_S:
             return
         _last_error_alert[kind] = now
-    _post_discord_payload({"embeds": [_build_embed(row)]})
+    _post_discord_payload({"embeds": [_build_embed(row)]}, url)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +437,10 @@ def send_digest(day: str | None = None) -> dict:
     today_events = [e for e in all_events if "ts" in e and kst_date(e["ts"]) == target_day]
     today = aggregate_events(today_events)
     cumulative = aggregate_events(all_events)
-    _post_discord_payload({"embeds": [build_digest_embed(target_day, today, cumulative)]})
+    _post_discord_payload(
+        {"embeds": [build_digest_embed(target_day, today, cumulative)]},
+        _webhook_url_for("digest"),
+    )
     return {
         "day": target_day,
         "visitors": today["visitors"],

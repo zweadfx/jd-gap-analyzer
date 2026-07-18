@@ -76,8 +76,11 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
-  const [feedback, setFeedback] = useState("");
-  const [feedbackSent, setFeedbackSent] = useState(false);
+  // 하단 제보칸과 플로팅 모달은 독립 상태다 — 공유하면 타이핑이 서로 미러링된다.
+  const [bottomFeedback, setBottomFeedback] = useState("");
+  const [bottomSent, setBottomSent] = useState(false);
+  const [floatFeedback, setFloatFeedback] = useState("");
+  const [floatSent, setFloatSent] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -140,10 +143,10 @@ export default function Page() {
 
   // placement = 어느 화면·진입점에서 보냈는지(landing/input/waiting/result_bottom/floating_result).
   // 원문이 아니라 위치 메타만 붙인다 — 스키마는 추가만, 원문 금지 규칙 그대로.
-  function submitFeedback(placement: string) {
-    const text = feedback.trim();
+  function submitFeedback(placement: string, draft: string, markSent: () => void) {
+    const text = draft.trim();
     if (!text) return;
-    setFeedbackSent(true); // 실패해도 재전송 UI를 주지 않는다. 순수 로그다.
+    markSent(); // 실패해도 재전송 UI를 주지 않는다. 순수 로그다. 각 진입점이 자기 상태를 마크한다.
     fetch(`${API}/events/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
@@ -410,25 +413,25 @@ export default function Page() {
               결과가 실제와 다르거나 아쉬운 점이 있으면 알려주세요. 혼자 만드는 도구라
               제보 하나하나가 다음 버전을 정합니다. 직접 읽습니다.
             </p>
-            {feedbackSent ? (
+            {bottomSent ? (
               <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>
             ) : (
               <form
                 className="feedback"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submitFeedback("result_bottom");
+                  submitFeedback("result_bottom", bottomFeedback, () => setBottomSent(true));
                 }}
               >
                 <div className="feedback-row">
                   <input
                     id="feedback"
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
+                    value={bottomFeedback}
+                    onChange={(e) => setBottomFeedback(e.target.value)}
                     maxLength={500}
                     placeholder="예: 이력서에 있는 항목인데 없다고 나왔어요"
                   />
-                  <button type="submit" disabled={!feedback.trim()}>
+                  <button type="submit" disabled={!bottomFeedback.trim()}>
                     제보
                   </button>
                 </div>
@@ -482,14 +485,14 @@ export default function Page() {
                 ✕
               </button>
             </div>
-            {feedbackSent ? (
+            {floatSent ? (
               <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>
             ) : (
               <form
                 className="feedback"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submitFeedback(floatingPlacement);
+                  submitFeedback(floatingPlacement, floatFeedback, () => setFloatSent(true));
                 }}
               >
                 <p className="report-desc">
@@ -497,13 +500,13 @@ export default function Page() {
                 </p>
                 <div className="feedback-row">
                   <input
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
+                    value={floatFeedback}
+                    onChange={(e) => setFloatFeedback(e.target.value)}
                     maxLength={500}
                     placeholder="예: 공고가 이미지라 붙여넣기가 안 돼요"
                     autoFocus
                   />
-                  <button type="submit" disabled={!feedback.trim()}>
+                  <button type="submit" disabled={!floatFeedback.trim()}>
                     제보
                   </button>
                 </div>

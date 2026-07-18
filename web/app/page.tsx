@@ -78,6 +78,7 @@ export default function Page() {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,6 +116,10 @@ export default function Page() {
     !resumeOver &&
     !loading;
 
+  // 플로팅 버튼이 눌린 화면. result 화면의 플로팅은 하단 제보칸(result_bottom)과 구분해 floating_result.
+  const screen = loading ? "waiting" : result ? "result" : job.trim() || resume.trim() ? "input" : "landing";
+  const floatingPlacement = screen === "result" ? "floating_result" : screen;
+
   // 낯선 사이트에 자기 이력서를 바로 붙여넣는 사람은 없다. 가상 샘플로 먼저 보여준다.
   // 샘플 원본은 서버(data/samples/)에 있다. 프론트에 사본을 두면 언젠가 어긋난다.
   async function loadSample() {
@@ -132,15 +137,16 @@ export default function Page() {
     }
   }
 
-  async function sendFeedback(e: React.FormEvent) {
-    e.preventDefault();
+  // placement = 어느 화면·진입점에서 보냈는지(landing/input/waiting/result_bottom/floating_result).
+  // 원문이 아니라 위치 메타만 붙인다 — 스키마는 추가만, 원문 금지 규칙 그대로.
+  function submitFeedback(placement: string) {
     const text = feedback.trim();
     if (!text) return;
     setFeedbackSent(true); // 실패해도 재전송 UI를 주지 않는다. 순수 로그다.
     fetch(`${API}/events/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, placement }),
     }).catch(() => {});
   }
 
@@ -402,7 +408,13 @@ export default function Page() {
             {feedbackSent ? (
               <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>
             ) : (
-              <form className="feedback" onSubmit={sendFeedback}>
+              <form
+                className="feedback"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitFeedback("result_bottom");
+                }}
+              >
                 <div className="feedback-row">
                   <input
                     id="feedback"
@@ -436,6 +448,63 @@ export default function Page() {
           GitHub
         </a>
       </footer>
+
+      {/* 플로팅 피드백 진입점 — 모든 화면 우하단 고정. 결과 하단 제보칸(result_bottom)은 유지, 이건 추가 진입점.
+          목적: 생성(이미지 처리 등) 착수 전에 제보가 실제로 오는지 실측하는 실험이다.
+          사전 예측 — 소유자: 유의미하게 온다 / 자문: 거의 0. placement 분포가 판정한다 (2026-07-19 사전 등록). */}
+      <button type="button" className="fab" onClick={() => setFeedbackOpen(true)} aria-label="피드백 보내기">
+        피드백
+      </button>
+
+      {feedbackOpen && (
+        <div className="fab-backdrop" onClick={() => setFeedbackOpen(false)}>
+          <div
+            className="fab-modal"
+            role="dialog"
+            aria-label="개발자에게 제보하기"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="fab-modal-head">
+              <span>개발자에게 제보하기</span>
+              <button
+                type="button"
+                className="fab-close"
+                onClick={() => setFeedbackOpen(false)}
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            {feedbackSent ? (
+              <p className="feedback-done">제보 감사합니다. 개발자가 직접 읽습니다.</p>
+            ) : (
+              <form
+                className="feedback"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitFeedback(floatingPlacement);
+                }}
+              >
+                <p className="report-desc">
+                  결과가 이상하거나 아쉬운 점, 원하는 기능 무엇이든 알려주세요. 직접 읽습니다.
+                </p>
+                <div className="feedback-row">
+                  <input
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    maxLength={500}
+                    placeholder="예: 공고가 이미지라 붙여넣기가 안 돼요"
+                    autoFocus
+                  />
+                  <button type="submit" disabled={!feedback.trim()}>
+                    제보
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

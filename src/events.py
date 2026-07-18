@@ -187,6 +187,7 @@ def log_event(
     cost_usd: float | None = None,
     error_kind: str | None = None,
     feedback_text: str | None = None,
+    placement: str | None = None,
 ) -> None:
     """이벤트 한 줄을 append 한다.
 
@@ -213,6 +214,9 @@ def log_event(
         # 유일하게 허용되는 자유 텍스트. 유저가 자발적으로 쓴 피드백 한 줄이지
         # 공고/지원 문서가 아니다. 그래도 상한으로 자른다 — 전문 붙여넣기 사고 방지.
         "feedback_text": feedback_text[:MAX_FEEDBACK_CHARS] if feedback_text else None,
+        # 제보를 보낸 화면·진입점 메타(landing/floating_result 등). 위치 라벨일 뿐 원문이 아니다.
+        # 클라이언트 조작 대비 짧게 자른다 — enum 라벨이라 24자면 충분하다.
+        "placement": placement[:24] if placement else None,
     }
     row = {k: v for k, v in row.items() if v is not None}
 
@@ -286,6 +290,8 @@ def _build_embed(row: dict) -> dict:
         embed["title"] = "💬 제보"
         # feedback_text는 설계상 허용된 유일한 자유 텍스트 필드다(log_event가 상한으로 자른다).
         embed["description"] = row.get("feedback_text") or ""
+        if row.get("placement"):
+            embed["fields"] = [_field("위치", row["placement"])]
     else:
         embed["title"] = str(ev)
     return embed

@@ -82,6 +82,10 @@ class AnalyzeRequest(BaseModel):
 
 class FeedbackRequest(BaseModel):
     text: str = Field(description="결과 화면의 피드백 한 줄. 파이프라인에 들어가지 않는 순수 로그")
+    placement: str = Field(
+        default="",
+        description="제보를 보낸 화면·진입점 메타(landing/input/waiting/result_bottom/floating_result 등). 원문 아님, 위치 라벨만",
+    )
 
 
 # 샘플 체험용. data/samples/는 커밋된 가상 데이터라 배포 이미지에 항상 있다.
@@ -217,10 +221,15 @@ def track_page_view(x_anon_id: str = Header(default="")) -> dict:
 
 @app.post("/events/feedback")
 def track_feedback(body: FeedbackRequest, x_anon_id: str = Header(default="")) -> dict:
-    """결과 화면의 '결과가 이상한가요?' 한 줄. 저장만 하고 아무 데도 쓰지 않는다."""
+    """제보 한 줄. 저장만 하고 아무 데도 쓰지 않는다. placement는 어느 화면에서 왔는지 위치 메타."""
     text = body.text.strip()
     if text:
-        events.log_event("feedback", x_anon_id or events.new_anon_id(), feedback_text=text)
+        events.log_event(
+            "feedback",
+            x_anon_id or events.new_anon_id(),
+            feedback_text=text,
+            placement=body.placement or None,
+        )
     return {"ok": True}
 
 

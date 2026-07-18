@@ -760,6 +760,78 @@ h2 {
   font-weight: 700;
 }
 
+/* --- 플로팅 피드백 버튼: 모든 화면 우하단 고정. 아웃라인 스타일(작게, 콘텐츠 안 가리게) --- */
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  width: auto;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--blue-strong);
+  border: 1.5px solid var(--blue);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* :not(:disabled)로 전역 button:hover(진파랑 배경)를 이긴다 — 안 그러면 텍스트가 사라진다 */
+.fab:hover:not(:disabled) {
+  background: var(--blue-bg);
+  color: var(--blue-strong);
+}
+
+/* --- 제보 모달 (플로팅 버튼 클릭 시) --- */
+.fab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.fab-modal {
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.fab-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.fab-close {
+  width: auto;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  font-size: 15px;
+  border-radius: var(--radius-sm);
+}
+
+.fab-close:hover:not(:disabled) {
+  background: var(--bg-soft);
+  color: var(--fg);
+}
+
+.fab-modal .report-desc {
+  margin: 6px 0 12px;
+}
+
 /* --- 모바일 375px --- */
 @media (max-width: 480px) {
   .wrap {

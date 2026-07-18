@@ -79,6 +79,7 @@ export default function Page() {
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -236,6 +237,8 @@ export default function Page() {
             id="job"
             value={job}
             onChange={(e) => setJob(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
             placeholder="자격요건·우대사항이 포함된 공고 전문을 붙여넣으세요."
           />
         </div>
@@ -251,6 +254,8 @@ export default function Page() {
             id="resume"
             value={resume}
             onChange={(e) => setResume(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
             placeholder="이력서 또는 포트폴리오를 붙여넣으세요. 저장하지 않습니다."
           />
           {/* PDF 업로드 기능은 만들지 않는다. 품질 숫자(Top3 7/8)는 깨끗한 텍스트로 잰 값이고,
@@ -452,9 +457,11 @@ export default function Page() {
       {/* 플로팅 피드백 진입점 — 모든 화면 우하단 고정. 결과 하단 제보칸(result_bottom)은 유지, 이건 추가 진입점.
           목적: 생성(이미지 처리 등) 착수 전에 제보가 실제로 오는지 실측하는 실험이다.
           사전 예측 — 소유자: 유의미하게 온다 / 자문: 거의 0. placement 분포가 판정한다 (2026-07-19 사전 등록). */}
-      <button type="button" className="fab" onClick={() => setFeedbackOpen(true)} aria-label="피드백 보내기">
-        피드백
-      </button>
+      {!inputFocused && !feedbackOpen && (
+        <button type="button" className="fab" onClick={() => setFeedbackOpen(true)} aria-label="피드백 보내기">
+          피드백
+        </button>
+      )}
 
       {feedbackOpen && (
         <div className="fab-backdrop" onClick={() => setFeedbackOpen(false)}>

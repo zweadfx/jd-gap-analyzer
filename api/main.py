@@ -20,11 +20,12 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError, AuthenticationError
 from pydantic import BaseModel, Field
 
+from api import vision
 from src import events
 from src.pipeline import InputTooLongError, LLMParseError, analyze
 from src.schemas import MAX_JOB_CHARS, MAX_RESUME_CHARS, RunRecord
@@ -74,10 +75,36 @@ RATE_WINDOW_S = 24 * 3600
 _hits: dict[str, deque[float]] = defaultdict(deque)
 _global_hits: deque[float] = deque()
 
+# --- B안 비전 전사 가드: 전역 10회/일 · IP 2회/일 (텍스트 가드와 동일한 롤링 24h) ---
+# 최악 10×$0.28 ≈ $2.8/일, 평균 ≈ $1.6/일 — 텍스트 분석 하드캡과 동급(feedback-log 결정).
+# 상한 도달 시 자동 확장하지 않는다 — 로그를 보고 의식적으로 상향한다.
+VISION_GLOBAL_DAILY = int(os.getenv("VISION_GLOBAL_DAILY", "10"))
+VISION_IP_DAILY = int(os.getenv("VISION_IP_DAILY", "2"))
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+_vision_hits: dict[str, deque[float]] = defaultdict(deque)
+_vision_global_hits: deque[float] = deque()
+
+
+def vision_check_and_consume(ip: str) -> str | None:
+    """비전 전용 카운터. check_and_consume와 동일 규칙 — 거절 요청은 카운트를 소비하지 않는다."""
+    now = time.time()
+    _prune(_vision_global_hits, now)
+    if len(_vision_global_hits) >= VISION_GLOBAL_DAILY:
+        return "global"
+    hits = _vision_hits[ip]
+    _prune(hits, now)
+    if len(hits) >= VISION_IP_DAILY:
+        return "ip"
+    _vision_global_hits.append(now)
+    hits.append(now)
+    return None
+
 
 class AnalyzeRequest(BaseModel):
     job: str = Field(description="채용 공고 원문")
     resume: str = Field(description="지원 문서(이력서 또는 포트폴리오) 원문")
+    # B안 성공 지표(이미지 입력 전환율 vs 텍스트 기준선 9%)의 라벨. 파이프라인엔 안 들어간다.
+    input_mode: str = Field(default="text", description="입력 방식 메타(text|image)")
 
 
 class FeedbackRequest(BaseModel):
@@ -242,6 +269,75 @@ def sample() -> dict:
     }
 
 
+# B안: 이미지 공고 → 텍스트 전사. 전사는 입력창을 채우는 것까지 — 이후는 기존 텍스트 흐름 그대로다.
+# 이미지는 메모리에서만 처리하고 저장하지 않는다. 전사 원문도 저장하지 않는다(이벤트엔 메타만).
+@app.post("/transcribe")
+async def transcribe_endpoint(
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI 관용 패턴(의존성 선언). 런타임 함수호출 아님
+    x_anon_id: str = Header(default=""),
+) -> dict:
+    anon_id = x_anon_id or events.new_anon_id()
+    ip = client_ip(request)
+    events.log_event("transcribe_requested", anon_id)
+
+    # 싼 검증(MIME·크기·타일 상한)을 카운터 소비 전에 — 거절이 비전 슬롯을 태우면 안 된다.
+    if not (file.content_type or "").startswith("image/"):
+        events.log_event("transcribe_failed", anon_id, error_kind="bad_mime")
+        response.status_code = 400
+        return {"error": "이미지 파일만 올릴 수 있어요. (jpg, png 등)"}
+    data = await file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        events.log_event("transcribe_failed", anon_id, error_kind="too_large")
+        response.status_code = 400
+        return {"error": "이미지가 10MB를 넘습니다. 용량을 줄여서 다시 올려주세요."}
+    try:
+        tiles = vision.tile_image(data)
+    except vision.ImageTooLongError:
+        events.log_event("transcribe_failed", anon_id, error_kind="image_too_long")
+        response.status_code = 400
+        return {
+            "error": "공고 이미지가 너무 깁니다. 자격요건·우대사항 부분 위주로 잘라서 올려주세요."
+        }
+    except Exception:  # noqa: BLE001 - 깨진/비정상 이미지
+        events.log_event("transcribe_failed", anon_id, error_kind="bad_image")
+        response.status_code = 400
+        return {"error": "이미지를 열 수 없습니다. 다른 파일로 시도해주세요."}
+
+    limit = vision_check_and_consume(ip)
+    if limit == "global":
+        events.log_event("transcribe_failed", anon_id, error_kind="vision_global_limit")
+        response.status_code = 429
+        return {
+            "error": "오늘 이미지 읽기 한도가 소진됐습니다. 텍스트를 복사해 붙여넣거나, 약 24시간 후 다시 이용해주세요."
+        }
+    if limit == "ip":
+        events.log_event("transcribe_failed", anon_id, error_kind="vision_rate_limited")
+        response.status_code = 429
+        return {
+            "error": f"이미지 읽기는 하루 {VISION_IP_DAILY}회까지예요. 텍스트를 복사해 붙여넣으면 횟수 제한 없이 이용할 수 있어요."
+        }
+
+    try:
+        result = vision.transcribe_tiles(tiles)
+    except Exception as exc:  # noqa: BLE001 - 조용한 실패 금지: 이벤트로 남기고 명시 에러
+        events.log_event(
+            "transcribe_failed", anon_id, error_kind=f"vision_api:{type(exc).__name__}"
+        )
+        response.status_code = 502
+        return {"error": "이미지를 읽는 중 오류가 났습니다. 잠시 후 다시 시도해주세요."}
+
+    events.log_event(
+        "transcribe_succeeded",
+        anon_id,
+        tiles=result["tiles"],
+        latency_s=result["latency_s"],
+        cost_usd=result["cost_usd"],
+    )
+    return {"text": result["text"]}
+
+
 @app.post("/analyze")
 def analyze_endpoint(
     body: AnalyzeRequest,
@@ -252,7 +348,11 @@ def analyze_endpoint(
     anon_id = x_anon_id or events.new_anon_id()
     ip = client_ip(request)
 
-    events.log_event("submit", anon_id, job_chars=len(body.job), resume_chars=len(body.resume))
+    # input_mode는 화이트리스트로만 기록 — 클라이언트가 보내는 자유 문자열을 그대로 믿지 않는다.
+    mode = body.input_mode if body.input_mode in ("text", "image") else "other"
+    events.log_event(
+        "submit", anon_id, job_chars=len(body.job), resume_chars=len(body.resume), input_mode=mode
+    )
 
     limit = check_and_consume(ip)
     if limit == "global":
@@ -310,6 +410,7 @@ def analyze_endpoint(
         top_gap_count=len(record.top_gap_ids),
         latency_s=s.latency_s,
         cost_usd=s.cost_usd,
+        input_mode=mode,
     )
 
     # save_run()을 부르지 않는다. 유저 문서를 서버에 파일로 쌓지 않는다.

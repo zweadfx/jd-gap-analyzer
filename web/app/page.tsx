@@ -83,6 +83,11 @@ export default function Page() {
   const [floatSent, setFloatSent] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  // B안: 이미지 공고 전사. 전사는 입력창을 채우는 것까지 — 제출은 기존 흐름 그대로.
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribedNote, setTranscribedNote] = useState(false);
+  const [inputMode, setInputMode] = useState<"text" | "image">("text");
+  const fileRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -154,6 +159,39 @@ export default function Page() {
     }).catch(() => {});
   }
 
+  // 이미지 공고 업로드 → 전사 → 공고 입력창 채움. 유저가 훑어보고 기존 버튼으로 제출한다.
+  async function uploadJobImage(f: File) {
+    if (f.size > 10 * 1024 * 1024) {
+      setError("이미지가 10MB를 넘습니다. 용량을 줄여서 다시 올려주세요.");
+      return;
+    }
+    setTranscribing(true);
+    setError(null);
+    setTranscribedNote(false);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch(`${API}/transcribe`, {
+        method: "POST",
+        headers: { "X-Anon-Id": getAnonId() },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "이미지를 읽지 못했습니다. 잠시 후 다시 시도해주세요.");
+      } else {
+        setJob(data.text);
+        setInputMode("image");
+        setTranscribedNote(true);
+      }
+    } catch {
+      setError("이미지를 읽는 중 연결이 끊겼습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setTranscribing(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -165,7 +203,7 @@ export default function Page() {
       const res = await fetch(`${API}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
-        body: JSON.stringify({ job, resume }),
+        body: JSON.stringify({ job, resume, input_mode: inputMode }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -239,11 +277,43 @@ export default function Page() {
           <textarea
             id="job"
             value={job}
-            onChange={(e) => setJob(e.target.value)}
+            onChange={(e) => {
+              setJob(e.target.value);
+              if (e.target.value === "") {
+                setInputMode("text");
+                setTranscribedNote(false);
+              }
+            }}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             placeholder="자격요건·우대사항이 포함된 공고 전문을 붙여넣으세요."
           />
+          {/* B안: 이미지 공고 업로드. 전사 결과는 위 입력창에 채워지고, 제출은 기존 버튼 그대로. */}
+          <div className="upload-row">
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={() => fileRef.current?.click()}
+              disabled={transcribing || loading}
+            >
+              {transcribing ? "공고를 읽는 중… 최대 2분" : "공고가 이미지라면 — 이미지로 올리기"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadJobImage(f);
+              }}
+            />
+            {transcribedNote && !transcribing && (
+              <span className="upload-note">
+                이미지에서 읽은 텍스트입니다. 틀린 부분이 있으면 고쳐주세요.
+              </span>
+            )}
+          </div>
         </div>
 
         <div>

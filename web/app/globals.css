@@ -760,6 +760,45 @@ h2 {
   font-weight: 700;
 }
 
+/* --- 이미지 공고 업로드(B안): 작은 아웃라인 버튼 + 전사 안내 한 줄 --- */
+.upload-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.upload-btn {
+  width: auto;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--bg);
+  color: var(--blue-strong);
+  border: 1.5px solid var(--blue);
+  border-radius: var(--radius-sm);
+}
+
+/* :not(:disabled)로 전역 button:hover(진파랑 배경)를 이긴다 — .sample에서 배운 특이도 교훈 */
+.upload-btn:hover:not(:disabled) {
+  background: var(--blue-bg);
+  color: var(--blue-strong);
+}
+
+.upload-btn:disabled {
+  background: var(--bg-soft);
+  color: var(--muted);
+  border-color: var(--line-strong);
+  opacity: 1;
+}
+
+.upload-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
 /* --- 플로팅 피드백 버튼: 모든 화면 우하단 고정. 아웃라인 스타일(작게, 콘텐츠 안 가리게) --- */
 .fab {
   position: fixed;

@@ -22,11 +22,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from src.schemas import MODEL, PRICE_INPUT_PER_1M, PRICE_OUTPUT_PER_1M  # noqa: E402
-
 load_dotenv()
+
+# 재스파이크(2026-07-21 사전 등록): 모델만 gpt-5.5로 교체, 그 외 전 변인 동결.
+# 파이프라인 MODEL(src.schemas)은 건드리지 않는다 — 이 스크립트만의 비전 모델이다.
+# 단가는 OpenAI 공식 가격표(developers.openai.com/api/docs/pricing, 2026-07-21 확인) 기준.
+VISION_MODEL = "gpt-5.5"
+PRICE_INPUT_PER_1M = 5.00
+PRICE_OUTPUT_PER_1M = 30.00
+OUT_DIR = Path("out/private/spike_vision_55")  # 1차(nano) 출력을 덮어쓰지 않는다
 
 # 전사 프롬프트 — 단순하게. 표 읽기 순서 힌트를 주지 않는다(그게 관전 포인트라 힌트는 반칙).
 PROMPT = "이미지에 적힌 텍스트를 그대로 받아 적어 주세요. 요약·해석·설명을 하지 말고, 보이는 글자만 순서대로 적으세요."
@@ -46,9 +50,9 @@ def main() -> int:
         return 1
 
     client = OpenAI()
-    out_dir = Path("out/private/spike_vision")
+    out_dir = OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"model={MODEL}\n")
+    print(f"model={VISION_MODEL}\n")
     total_cost = 0.0
     for name, tiles in groups.items():
         t0 = time.time()
@@ -57,7 +61,7 @@ def main() -> int:
         for p in tiles:
             b64 = base64.b64encode(p.read_bytes()).decode()
             resp = client.chat.completions.create(
-                model=MODEL,
+                model=VISION_MODEL,
                 messages=[
                     {
                         "role": "user",

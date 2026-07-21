@@ -36,7 +36,17 @@ from typing import Literal
 
 # feedback은 퍼널 4종(page_view→submit→result_shown/error)과 별개의 순수 로그다.
 # 파이프라인에 들어가지 않고, 집계에도 안 쓴다. "결과가 이상한가요?" 한 줄의 보관소.
-EventName = Literal["page_view", "submit", "result_shown", "error", "feedback"]
+# transcribe_*는 B안(이미지 전사)의 계측 — 메타(타일 수·지연·비용)만, 이미지 내용은 기록 안 함.
+EventName = Literal[
+    "page_view",
+    "submit",
+    "result_shown",
+    "error",
+    "feedback",
+    "transcribe_requested",
+    "transcribe_succeeded",
+    "transcribe_failed",
+]
 
 # 피드백 자유 입력의 상한. 이력서를 통째로 붙여넣는 사고를 길이로 차단한다.
 MAX_FEEDBACK_CHARS = 500
@@ -142,7 +152,9 @@ def aggregate_events(events: list[dict]) -> dict:
     ]
 
     costs = [e["cost_usd"] for e in events if "cost_usd" in e]
-    lats = [e["latency_s"] for e in events if "latency_s" in e]
+    # 지연 중앙값은 분석(result_shown) 기준 — transcribe 지연과 섞으면 두 지표 다 무의미해진다.
+    lats = [e["latency_s"] for e in by_event.get("result_shown", []) if "latency_s" in e]
+    vision = by_event.get("transcribe_succeeded", [])
 
     return {
         "n_events": len(events),
@@ -161,6 +173,9 @@ def aggregate_events(events: list[dict]) -> dict:
         "median_latency": statistics.median(lats) if lats else None,
         "latency_min": min(lats) if lats else None,
         "latency_max": max(lats) if lats else None,
+        # B안 비전 사용 계측(성공 건 기준). 비용은 total_cost에도 포함된다(총 API 비용).
+        "vision_count": len(vision),
+        "vision_cost": sum(e.get("cost_usd", 0) for e in vision),
     }
 
 
@@ -188,6 +203,8 @@ def log_event(
     error_kind: str | None = None,
     feedback_text: str | None = None,
     placement: str | None = None,
+    tiles: int | None = None,
+    input_mode: str | None = None,
 ) -> None:
     """이벤트 한 줄을 append 한다.
 
@@ -217,6 +234,10 @@ def log_event(
         # 제보를 보낸 화면·진입점 메타(landing/floating_result 등). 위치 라벨일 뿐 원문이 아니다.
         # 클라이언트 조작 대비 짧게 자른다 — enum 라벨이라 24자면 충분하다.
         "placement": placement[:24] if placement else None,
+        # B안 계측: 전사 타일 수. 이미지 내용은 어디에도 기록하지 않는다.
+        "tiles": tiles,
+        # 분석 입력 방식(text|image) — B안 성공 지표(전환율 비교)의 분모 라벨.
+        "input_mode": input_mode[:8] if input_mode else None,
     }
     row = {k: v for k, v in row.items() if v is not None}
 
@@ -411,6 +432,7 @@ def build_digest_embed(day: str, today: dict, cumulative: dict) -> dict:
         _field("에러", today["errors"]),
         _field("비용", f"${today['total_cost']:.4f}"),
         _field("지연중앙", f"{med:.1f}s" if med is not None else "—"),
+        _field("비전(이미지)", f"{today['vision_count']}회 · ${today['vision_cost']:.4f}"),
     ]
     embed = {
         "title": f"📊 일일 요약 · {day} (KST)",

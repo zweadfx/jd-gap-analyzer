@@ -15,6 +15,7 @@ Vercel과 Railway는 다른 도메인이라 쿠키가 서드파티가 되어 브
 """
 
 import os
+import threading
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -83,6 +84,9 @@ VISION_IP_DAILY = int(os.getenv("VISION_IP_DAILY", "2"))
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _vision_hits: dict[str, deque[float]] = defaultdict(deque)
 _vision_global_hits: deque[float] = deque()
+# 전사 잡 저장소(잡+폴링). 인메모리 — 결과는 TTL 뒤 사라진다(전사 원문 미저장 원칙의 연장).
+_jobs: dict[str, dict] = {}
+_JOB_TTL_S = 600
 
 
 def vision_check_and_consume(ip: str) -> str | None:
@@ -319,23 +323,49 @@ async def transcribe_endpoint(
             "error": f"이미지 읽기는 하루 {VISION_IP_DAILY}회까지예요. 텍스트를 복사해 붙여넣으면 횟수 제한 없이 이용할 수 있어요."
         }
 
+    # 잡+폴링으로 반환. 직접 응답이 아니라 job_id를 즉시 주고 전사는 스레드에서 돈다.
+    # 이유(실측 2026-07-22): Railway 엣지가 ~60초 넘는 브라우저 연결에서 응답을 유실했다
+    # (서버 200·59.2s인데 브라우저 미수신, curl 34s는 통과 — 장수명 연결 문제). 다중 타일
+    # 이미지는 흔히 60초를 넘으므로 3초 간격 짧은 폴링 GET으로 우회한다. 인메모리(인스턴스 1대 전제).
+    job_id = events.new_anon_id()
+    _jobs[job_id] = {"status": "pending", "created": time.time()}
+    threading.Thread(target=_run_transcribe, args=(job_id, tiles, anon_id), daemon=True).start()
+    return {"job_id": job_id}
+
+
+def _run_transcribe(job_id: str, tiles: list[bytes], anon_id: str) -> None:
     try:
         result = vision.transcribe_tiles(tiles)
+        events.log_event(
+            "transcribe_succeeded",
+            anon_id,
+            tiles=result["tiles"],
+            latency_s=result["latency_s"],
+            cost_usd=result["cost_usd"],
+        )
+        _jobs[job_id] = {"status": "done", "text": result["text"], "created": time.time()}
     except Exception as exc:  # noqa: BLE001 - 조용한 실패 금지: 이벤트로 남기고 명시 에러
         events.log_event(
             "transcribe_failed", anon_id, error_kind=f"vision_api:{type(exc).__name__}"
         )
-        response.status_code = 502
-        return {"error": "이미지를 읽는 중 오류가 났습니다. 잠시 후 다시 시도해주세요."}
+        _jobs[job_id] = {
+            "status": "failed",
+            "error": "이미지를 읽는 중 오류가 났습니다. 잠시 후 다시 시도해주세요.",
+            "created": time.time(),
+        }
 
-    events.log_event(
-        "transcribe_succeeded",
-        anon_id,
-        tiles=result["tiles"],
-        latency_s=result["latency_s"],
-        cost_usd=result["cost_usd"],
-    )
-    return {"text": result["text"]}
+
+@app.get("/transcribe/{job_id}")
+def transcribe_status(job_id: str, response: Response) -> dict:
+    """전사 잡 폴링. 결과는 메모리에만 있다가 TTL로 사라진다 — 전사 원문 미저장 원칙 유지."""
+    now = time.time()
+    for k in [k for k, v in _jobs.items() if now - v["created"] > _JOB_TTL_S]:
+        _jobs.pop(k, None)
+    job = _jobs.get(job_id)
+    if not job:
+        response.status_code = 404
+        return {"status": "unknown", "error": "만료되었거나 없는 작업입니다. 다시 업로드해주세요."}
+    return {k: v for k, v in job.items() if k != "created"}
 
 
 @app.post("/analyze")

@@ -171,6 +171,8 @@ export default function Page() {
     try {
       const fd = new FormData();
       fd.append("file", f);
+      // 잡+폴링: 업로드는 job_id만 즉시 받고, 3초 간격 GET으로 결과를 기다린다.
+      // 긴 단일 요청은 프록시가 ~60초 넘게 물고 있질 못한다(실측) — 짧은 폴링이 견고하다.
       const res = await fetch(`${API}/transcribe`, {
         method: "POST",
         headers: { "X-Anon-Id": getAnonId() },
@@ -179,11 +181,26 @@ export default function Page() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "이미지를 읽지 못했습니다. 잠시 후 다시 시도해주세요.");
-      } else {
-        setJob(data.text);
-        setInputMode("image");
-        setTranscribedNote(true);
+        return;
       }
+      const jobId = data.job_id;
+      const deadline = Date.now() + 3 * 60 * 1000; // 최대 3분
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const st = await fetch(`${API}/transcribe/${jobId}`);
+        const s = await st.json();
+        if (s.status === "done") {
+          setJob(s.text);
+          setInputMode("image");
+          setTranscribedNote(true);
+          return;
+        }
+        if (s.status === "failed" || s.status === "unknown") {
+          setError(s.error ?? "이미지를 읽지 못했습니다. 잠시 후 다시 시도해주세요.");
+          return;
+        }
+      }
+      setError("이미지 읽기가 3분을 넘겼습니다. 잠시 후 다시 시도해주세요.");
     } catch {
       setError("이미지를 읽는 중 연결이 끊겼습니다. 잠시 후 다시 시도해주세요.");
     } finally {

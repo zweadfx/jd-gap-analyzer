@@ -81,6 +81,9 @@ _global_hits: deque[float] = deque()
 # 상한 도달 시 자동 확장하지 않는다 — 로그를 보고 의식적으로 상향한다.
 VISION_GLOBAL_DAILY = int(os.getenv("VISION_GLOBAL_DAILY", "10"))
 VISION_IP_DAILY = int(os.getenv("VISION_IP_DAILY", "2"))
+# 소유자 테스트용 IP 면제(콤마 구분, env로만 — IP를 public 레포에 넣지 않는다).
+# IP 상한만 면제하고 전역 상한은 그대로 센다 — 소유자 테스트도 실비용이라 비용 캡은 유지.
+VISION_IP_EXEMPT = {ip.strip() for ip in os.getenv("VISION_IP_EXEMPT", "").split(",") if ip.strip()}
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 _vision_hits: dict[str, deque[float]] = defaultdict(deque)
 _vision_global_hits: deque[float] = deque()
@@ -95,6 +98,9 @@ def vision_check_and_consume(ip: str) -> str | None:
     _prune(_vision_global_hits, now)
     if len(_vision_global_hits) >= VISION_GLOBAL_DAILY:
         return "global"
+    if ip in VISION_IP_EXEMPT:
+        _vision_global_hits.append(now)  # 전역(비용 캡)은 소비하고 IP 상한만 건너뛴다
+        return None
     hits = _vision_hits[ip]
     _prune(hits, now)
     if len(hits) >= VISION_IP_DAILY:

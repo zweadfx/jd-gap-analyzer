@@ -88,6 +88,11 @@ export default function Page() {
   const [transcribedNote, setTranscribedNote] = useState(false);
   const [inputMode, setInputMode] = useState<"text" | "image">("text");
   const fileRef = useRef<HTMLInputElement>(null);
+  // 이력서 PDF: pdf.js 클라이언트 추출 — 파일이 서버로 가지 않는다(서버 무변경).
+  const [pdfExtracting, setPdfExtracting] = useState(false);
+  const [pdfNote, setPdfNote] = useState(false);
+  const [docInputMode, setDocInputMode] = useState<"text" | "pdf">("text");
+  const pdfRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -209,6 +214,54 @@ export default function Page() {
     }
   }
 
+  // 이력서 PDF → 브라우저에서 텍스트 추출 → 서류 입력창 채움. 파일은 서버로 전송되지 않는다.
+  async function extractPdf(f: File) {
+    if (f.size > 10 * 1024 * 1024) {
+      setError("PDF가 10MB를 넘습니다. 용량을 줄여서 다시 올려주세요.");
+      return;
+    }
+    setPdfExtracting(true);
+    setError(null);
+    setPdfNote(false);
+    try {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+        "pdfjs-dist/build/pdf.worker.min.mjs",
+        import.meta.url,
+      ).toString();
+      const doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+      let text = "";
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const tc = await page.getTextContent();
+        for (const it of tc.items) {
+          if ("str" in it) text += it.str + (it.hasEOL ? "\n" : " ");
+        }
+        text += "\n\n";
+      }
+      const clean = text.replace(/[ \t]+\n/g, "\n").trim();
+      // 계측: 페이지·글자 수만. 내용은 서버로 보내지 않는다.
+      fetch(`${API}/events/pdf_extracted`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
+        body: JSON.stringify({ pages: doc.numPages, chars: clean.length }),
+      }).catch(() => {});
+      if (clean.length < 100) {
+        // 텍스트 레이어 없는 스캔본. 비전 경로로 보내지 않는다 — 서버 무변경 원칙.
+        setError("이 PDF는 글자를 추출할 수 없어요. 내용을 복사해 붙여넣어주세요.");
+        return;
+      }
+      setResume(clean);
+      setDocInputMode("pdf");
+      setPdfNote(true);
+    } catch {
+      setError("PDF를 여는 데 실패했습니다. 내용을 복사해 붙여넣어주세요.");
+    } finally {
+      setPdfExtracting(false);
+      if (pdfRef.current) pdfRef.current.value = "";
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -220,7 +273,7 @@ export default function Page() {
       const res = await fetch(`${API}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Anon-Id": getAnonId() },
-        body: JSON.stringify({ job, resume, input_mode: inputMode }),
+        body: JSON.stringify({ job, resume, input_mode: inputMode, doc_input_mode: docInputMode }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -343,19 +396,43 @@ export default function Page() {
           <textarea
             id="resume"
             value={resume}
-            onChange={(e) => setResume(e.target.value)}
+            onChange={(e) => {
+              setResume(e.target.value);
+              if (e.target.value === "") {
+                setDocInputMode("text");
+                setPdfNote(false);
+              }
+            }}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             placeholder="이력서 또는 포트폴리오를 붙여넣으세요. 저장하지 않습니다."
           />
-          {/* PDF 업로드 기능은 만들지 않는다. 품질 숫자(Top3 7/8)는 깨끗한 텍스트로 잰 값이고,
-              표 기반 한국 이력서 PDF는 추출 시 텍스트가 뒤섞여 새 실패 표면이 된다 — 홍보 전날
-              열 위험이 아니다. 대신 이 힌트로 붙여넣기 마찰의 절반을 없애고, page_view→submit
-              전환율로 입력 마찰 가설을 검증한다. 전환이 처참하면 그때 pdf.js 클라이언트 추출
-              (서버 무변경, 추출 텍스트를 유저가 보고 고친 뒤 제출)로 D5+에 간다. */}
-          <p className="hint">
-            PDF 이력서는 열어서 전체 선택(Ctrl+A) → 복사 → 붙여넣기 하시면 됩니다.
-          </p>
+          {/* PDF 클라이언트 추출(pdf.js) — feedback-log 사전 등록 설계(D5+ 조건 충족으로 구현).
+              파일이 서버로 가지 않고, 추출 텍스트를 유저가 보고 고친 뒤 기존 버튼으로 제출한다.
+              스캔본(텍스트 레이어 없음)은 추출 불가 안내만 — 비전 경로로 보내지 않는다. */}
+          <div className="upload-row">
+            <button
+              type="button"
+              className="upload-btn"
+              onClick={() => pdfRef.current?.click()}
+              disabled={pdfExtracting || loading}
+            >
+              {pdfExtracting ? "PDF를 읽는 중…" : "이력서가 PDF라면 — PDF로 올리기"}
+            </button>
+            <input
+              ref={pdfRef}
+              type="file"
+              accept="application/pdf"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) extractPdf(f);
+              }}
+            />
+            {pdfNote && !pdfExtracting && (
+              <span className="upload-note">PDF에서 읽은 텍스트입니다. 확인 후 제출해주세요.</span>
+            )}
+          </div>
         </div>
 
         <button type="submit" disabled={!canSubmit}>

@@ -46,6 +46,7 @@ EventName = Literal[
     "transcribe_requested",
     "transcribe_succeeded",
     "transcribe_failed",
+    "pdf_extracted",
 ]
 
 # 피드백 자유 입력의 상한. 이력서를 통째로 붙여넣는 사고를 길이로 차단한다.
@@ -205,6 +206,8 @@ def log_event(
     placement: str | None = None,
     tiles: int | None = None,
     input_mode: str | None = None,
+    pages: int | None = None,
+    doc_input_mode: str | None = None,
 ) -> None:
     """이벤트 한 줄을 append 한다.
 
@@ -238,6 +241,10 @@ def log_event(
         "tiles": tiles,
         # 분석 입력 방식(text|image) — B안 성공 지표(전환율 비교)의 분모 라벨.
         "input_mode": input_mode[:8] if input_mode else None,
+        # PDF 추출 계측: 페이지 수(내용은 기록 안 함 — 추출 글자 수는 resume_chars에 실린다).
+        "pages": pages,
+        # 서류 입력 방식(text|pdf) — 공고 input_mode와 별개 축.
+        "doc_input_mode": doc_input_mode[:8] if doc_input_mode else None,
     }
     row = {k: v for k, v in row.items() if v is not None}
 

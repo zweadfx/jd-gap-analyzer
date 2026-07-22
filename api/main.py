@@ -114,7 +114,14 @@ class AnalyzeRequest(BaseModel):
     job: str = Field(description="채용 공고 원문")
     resume: str = Field(description="지원 문서(이력서 또는 포트폴리오) 원문")
     # B안 성공 지표(이미지 입력 전환율 vs 텍스트 기준선 9%)의 라벨. 파이프라인엔 안 들어간다.
-    input_mode: str = Field(default="text", description="입력 방식 메타(text|image)")
+    input_mode: str = Field(default="text", description="공고 입력 방식 메타(text|image)")
+    doc_input_mode: str = Field(default="text", description="서류 입력 방식 메타(text|pdf)")
+
+
+class PdfExtractedRequest(BaseModel):
+    # PDF 추출은 전부 클라이언트(pdf.js)에서 일어난다 — 서버는 계측 메타만 받는다. 내용 미수신.
+    pages: int = Field(ge=0, le=1000, description="PDF 페이지 수")
+    chars: int = Field(ge=0, le=1_000_000, description="추출된 글자 수")
 
 
 class FeedbackRequest(BaseModel):
@@ -270,6 +277,21 @@ def track_feedback(body: FeedbackRequest, x_anon_id: str = Header(default="")) -
     return {"ok": True}
 
 
+@app.post("/events/pdf_extracted")
+def track_pdf_extracted(body: PdfExtractedRequest, x_anon_id: str = Header(default="")) -> dict:
+    """PDF 클라이언트 추출 계측. 추출은 브라우저(pdf.js)에서 끝났고 여긴 메타(페이지·글자 수)만.
+
+    추출 글자 수는 resume_chars 필드에 싣는다(서류 글자 수라는 의미가 같다).
+    """
+    events.log_event(
+        "pdf_extracted",
+        x_anon_id or events.new_anon_id(),
+        pages=body.pages,
+        resume_chars=body.chars,
+    )
+    return {"ok": True}
+
+
 @app.get("/sample")
 def sample() -> dict:
     """샘플 체험 버튼용. 낯선 사이트에 자기 이력서를 바로 붙여넣는 사람은 없다."""
@@ -384,10 +406,16 @@ def analyze_endpoint(
     anon_id = x_anon_id or events.new_anon_id()
     ip = client_ip(request)
 
-    # input_mode는 화이트리스트로만 기록 — 클라이언트가 보내는 자유 문자열을 그대로 믿지 않는다.
+    # input_mode/doc_input_mode는 화이트리스트로만 기록 — 클라이언트 자유 문자열을 믿지 않는다.
     mode = body.input_mode if body.input_mode in ("text", "image") else "other"
+    doc_mode = body.doc_input_mode if body.doc_input_mode in ("text", "pdf") else "other"
     events.log_event(
-        "submit", anon_id, job_chars=len(body.job), resume_chars=len(body.resume), input_mode=mode
+        "submit",
+        anon_id,
+        job_chars=len(body.job),
+        resume_chars=len(body.resume),
+        input_mode=mode,
+        doc_input_mode=doc_mode,
     )
 
     limit = check_and_consume(ip)
@@ -447,6 +475,7 @@ def analyze_endpoint(
         latency_s=s.latency_s,
         cost_usd=s.cost_usd,
         input_mode=mode,
+        doc_input_mode=doc_mode,
     )
 
     # save_run()을 부르지 않는다. 유저 문서를 서버에 파일로 쌓지 않는다.

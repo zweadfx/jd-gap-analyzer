@@ -2,7 +2,10 @@
 
 채용 공고와 지원 문서를 넣으면, **공고가 요구하는데 문서에 근거가 없는 항목 Top 3**을 원문 인용과 함께 뽑아주는 도구.
 
-**웹: https://jd-gap-zweadfxs-projects.vercel.app** (무료 · 문서 저장 안 함)
+[![Status](https://img.shields.io/badge/Status-Service%20Ended-6B7280)](https://github.com/zweadfx/jd-gap-analyzer)
+
+> **운영 종료** — 2026년 7월에 배포해 운영했고 8월에 종료했습니다. [웹](https://jd-gap-zweadfxs-projects.vercel.app)의
+> 분석 기능은 동작하지 않습니다. **CLI로는 그대로 돌아갑니다** (아래 참조).
 
 공고가 **이미지**라면 업로드로 전사(비전 모델)해 입력창에 채워준다 — 유저가 확인·수정한 뒤 기존 파이프라인 그대로 분석한다. 이력서가 **PDF**라면 브라우저에서 텍스트를 추출해 채운다(파일이 서버로 가지 않는다).
 

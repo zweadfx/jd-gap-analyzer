@@ -1,18 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import ThemeToggle from "./theme-toggle";
 
 // 커뮤니티에 링크가 올라가면 사람들이 처음 보는 건 이 카드다. 유입의 첫 관문.
 const SITE = "https://jd-gap-zweadfxs-projects.vercel.app";
-const OG_TITLE = "공고는 요구하는데, 내 서류엔 없는 것 3가지";
+const OG_TITLE = "지원 문서 갭 분석기 — 서비스 운영 종료";
 // 모바일 카톡은 표시 폭이 더 좁아 문장 뒤가 더 많이 잘린다 — 신뢰 신호(무료·로그인 없음·저장
 // 안 함)를 맨 앞으로 당겨 잘려도 남게 한다. 또 이전 문구는 제목과 같은 말을 반복했다.
 const OG_DESC =
-  "무료 · 로그인 없음 · 문서 저장 안 함 | 공고와 이력서를 붙여넣으면 바로 확인됩니다.";
+  "2026년 7월 배포해 운영했고 8월에 종료했습니다. 코드와 측정 기록은 GitHub에서 볼 수 있습니다.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "지원 문서 갭 분석기 — 공고는 요구하는데 내 서류엔 없는 것",
+  title: "지원 문서 갭 분석기 — 서비스 운영 종료",
   description: OG_DESC,
   openGraph: {
     type: "website",
@@ -45,7 +44,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <ThemeToggle />
         {children}
       </body>
     </html>
